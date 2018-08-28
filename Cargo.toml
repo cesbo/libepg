@@ -1,0 +1,8 @@
+[package]
+name = "epg"
+version = "0.1.0"
+authors = ["Andrey Dyldin <and@cesbo.com>"]
+
+[dependencies]
+mpegts = { path = "../libmpegts" }
+xml = { path = "../libxml" }
