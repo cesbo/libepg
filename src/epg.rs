@@ -3,7 +3,6 @@ use std::time::*;
 
 use xml;
 use mpegts::psi::*;
-use mpegts::textcode::*;
 
 #[derive(Default, Debug, Clone)]
 pub struct EpgEvent {
@@ -98,9 +97,10 @@ impl EpgEvent {
             };
 
             eit_item.descriptors.push(Descriptor::Desc4D(Desc4D {
-                lang: StringDVB::from_str(0, lang),
-                name: StringDVB::from_str(codepage, title),
-                text: StringDVB::from_str(codepage, subtitle),
+                lang: lang.to_string(),
+                name: title.to_string(),
+                text: subtitle.to_string(),
+                codepage: codepage,
             }));
         }
 
@@ -108,9 +108,10 @@ impl EpgEvent {
             eit_item.descriptors.push(Descriptor::Desc4E(Desc4E {
                 number: 0,
                 last_number: 0,
-                lang: StringDVB::from_str(0, lang),
+                lang: lang.to_string(),
                 items: Vec::new(),
-                text: StringDVB::from_str(codepage, desc),
+                text: desc.to_string(),
+                codepage: codepage,
             }));
         }
     }
