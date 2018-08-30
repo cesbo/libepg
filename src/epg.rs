@@ -18,6 +18,7 @@ impl EpgEvent {
     pub fn parse_xml(&mut self, node: &xml::Node) {
         for i in node.iter_attr() {
             match i.key.as_str() {
+                "id" => self.id = u16::from_str_radix(&i.value, 10).unwrap_or(0),
                 "start" => self.start = parse_date(&i.value),
                 "stop" => self.stop = parse_date(&i.value),
                 _ => (),
@@ -230,10 +231,8 @@ fn parse_date(s: &str) -> u64 {
             _ => 0,
         };
         // day
-        x += match u64::from_str_radix(&s[6 .. 8], 10) {
-            Ok(v) => v,
-            _ => 0,
-        };
+        x += u64::from_str_radix(&s[6 .. 8], 10).unwrap_or(0);
+
         x -= 719561;
         x *= 86400;
 
@@ -248,10 +247,7 @@ fn parse_date(s: &str) -> u64 {
             _ => 0,
         };
         // second
-        x += match u64::from_str_radix(&s[12 .. 14], 10) {
-            Ok(v) => v,
-            _ => 0,
-        };
+        x += u64::from_str_radix(&s[12 .. 14], 10).unwrap_or(0);
     }
 
     if s.len() >= 20 {
