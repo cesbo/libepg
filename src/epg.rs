@@ -1,10 +1,13 @@
 use std::collections::HashMap;
+use std::time::*;
 
 use xml;
 use mpegts::psi::*;
+use mpegts::textcode::*;
 
 #[derive(Default, Debug, Clone)]
 pub struct EpgEvent {
+    pub id: u16,
     pub start: u64,
     pub stop: u64,
     pub title: HashMap<String, String>,
@@ -48,6 +51,7 @@ impl EpgEvent {
     }
 
     pub fn parse_eit(&mut self, eit_item: &EitItem) {
+        self.id = eit_item.event_id;
         self.start = eit_item.start;
         self.stop = eit_item.start + eit_item.duration as u64;
 
@@ -80,6 +84,36 @@ impl EpgEvent {
             };
         }
     }
+
+    pub fn assemble_eit(&self, eit_item: &mut EitItem, codepage: usize) {
+        eit_item.event_id = self.id;
+        eit_item.start = self.start;
+        eit_item.duration = (self.stop - self.start) as u32;
+        eit_item.status = 1;
+
+        for (lang, title) in self.title.iter() {
+            let subtitle = match self.subtitle.get(lang) {
+                Some(v) => v,
+                None => "",
+            };
+
+            eit_item.descriptors.push(Descriptor::Desc4D(Desc4D {
+                lang: StringDVB::from_str(0, lang),
+                name: StringDVB::from_str(codepage, title),
+                text: StringDVB::from_str(codepage, subtitle),
+            }));
+        }
+
+        for (lang, desc) in self.desc.iter() {
+            eit_item.descriptors.push(Descriptor::Desc4E(Desc4E {
+                number: 0,
+                last_number: 0,
+                lang: StringDVB::from_str(0, lang),
+                items: Vec::new(),
+                text: StringDVB::from_str(codepage, desc),
+            }));
+        }
+    }
 }
 
 #[derive(Default, Debug)]
@@ -87,6 +121,7 @@ pub struct EpgChannel {
     pub pnr: u16,
     pub tsid: u16,
     pub onid: u16,
+    pub codepage: usize,
     pub events: Vec<EpgEvent>,
 }
 
@@ -107,6 +142,22 @@ impl EpgChannel {
 
     pub fn sort(&mut self) {
         self.events.sort_by(|a, b| a.start.cmp(&b.start));
+    }
+
+    pub fn assemble_eit(&self, eit: &mut Eit) {
+        let current_time: u64 = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        for event in self.events.iter() {
+            let mut eit_item = EitItem::default();
+            event.assemble_eit(&mut eit_item, self.codepage);
+            if current_time >= event.start && current_time < event.stop {
+                eit_item.status = 4;
+            }
+            eit.items.push(eit_item);
+        }
     }
 }
 
