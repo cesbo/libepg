@@ -85,7 +85,9 @@ impl EpgEvent {
         }
     }
 
-    pub fn assemble_eit(&self, eit_item: &mut EitItem, codepage: usize) {
+    pub fn assemble_eit(&self, codepage: usize) -> EitItem {
+        let mut eit_item = EitItem::default();
+
         eit_item.event_id = self.id;
         eit_item.start = self.start;
         eit_item.duration = (self.stop - self.start) as u32;
@@ -115,15 +117,13 @@ impl EpgEvent {
                 codepage: codepage,
             }));
         }
+
+        eit_item
     }
 }
 
 #[derive(Default, Debug)]
 pub struct EpgChannel {
-    pub pnr: u16,
-    pub tsid: u16,
-    pub onid: u16,
-    pub codepage: usize,
     pub events: Vec<EpgEvent>,
 }
 
@@ -146,20 +146,25 @@ impl EpgChannel {
         self.events.sort_by(|a, b| a.start.cmp(&b.start));
     }
 
-    pub fn assemble_eit(&self, eit: &mut Eit) {
+    pub fn assemble_eit(&self, event_id: u16, codepage: usize) -> Eit {
+        let mut eit = Eit::default();
+        eit.table_id = 0x50;
+
         let current_time: u64 = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
         for event in self.events.iter() {
-            let mut eit_item = EitItem::default();
-            event.assemble_eit(&mut eit_item, self.codepage);
+            let mut eit_item = event.assemble_eit(codepage);
+            eit_item.event_id = event_id + eit.items.len() as u16;
             if current_time >= event.start && current_time < event.stop {
                 eit_item.status = 4;
             }
             eit.items.push(eit_item);
         }
+
+        eit
     }
 }
 
