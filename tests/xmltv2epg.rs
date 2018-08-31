@@ -14,8 +14,7 @@ fn test_parse_programme() {
 </programme>"#;
     let xml = xml::Node::parse(s).unwrap();
     let xml = xml.iter_child().next().unwrap();
-    let mut p = EpgEvent::default();
-    p.parse_xml(&xml);
+    let p = EpgEvent::parse_xml(&xml);
     assert_eq!(p.start, 1216103400);
     assert_eq!(p.stop, 1216060200);
     assert_eq!(p.title.get("en").unwrap(), "Title");

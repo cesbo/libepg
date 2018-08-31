@@ -6,7 +6,6 @@ use mpegts::psi::*;
 
 #[derive(Default, Debug, Clone)]
 pub struct EpgEvent {
-    pub id: u16,
     pub start: u64,
     pub stop: u64,
     pub title: HashMap<String, String>,
@@ -15,12 +14,13 @@ pub struct EpgEvent {
 }
 
 impl EpgEvent {
-    pub fn parse_xml(&mut self, node: &xml::Node) {
+    pub fn parse_xml(node: &xml::Node) -> EpgEvent {
+        let mut event = EpgEvent::default();
+
         for i in node.iter_attr() {
             match i.key.as_str() {
-                "id" => self.id = u16::from_str_radix(&i.value, 10).unwrap_or(0),
-                "start" => self.start = parse_date(&i.value),
-                "stop" => self.stop = parse_date(&i.value),
+                "start" => event.start = parse_date(&i.value),
+                "stop" => event.stop = parse_date(&i.value),
                 _ => (),
             };
         }
@@ -29,44 +29,47 @@ impl EpgEvent {
             match i.key.as_str() {
                 "title" => {
                     match i.get_attr("lang") {
-                        Some(v) => self.title.insert(v.to_string(), i.text.clone()),
+                        Some(v) => event.title.insert(v.to_string(), i.text.clone()),
                         None => continue,
                     };
                 },
                 "sub-title" => {
                     match i.get_attr("lang") {
-                        Some(v) => self.subtitle.insert(v.to_string(), i.text.clone()),
+                        Some(v) => event.subtitle.insert(v.to_string(), i.text.clone()),
                         None => continue,
                     };
                 },
                 "desc" => {
                     match i.get_attr("lang") {
-                        Some(v) => self.desc.insert(v.to_string(), i.text.clone()),
+                        Some(v) => event.desc.insert(v.to_string(), i.text.clone()),
                         None => continue,
                     };
                 },
                 _ => (),
             };
         }
+
+        event
     }
 
-    pub fn parse_eit(&mut self, eit_item: &EitItem) {
-        self.id = eit_item.event_id;
-        self.start = eit_item.start;
-        self.stop = eit_item.start + eit_item.duration as u64;
+    pub fn parse_eit(eit_item: &EitItem) -> EpgEvent {
+        let mut event = EpgEvent::default();
+
+        event.start = eit_item.start;
+        event.stop = eit_item.start + eit_item.duration as u64;
 
         for desc in eit_item.descriptors.iter() {
             match desc {
                 Descriptor::Desc4D(v) => {
                     if v.name.len() > 0 {
-                        self.title
+                        event.title
                             .entry(v.lang.to_string())
                             .or_insert_with(|| String::new())
                             .push_str(v.name.as_str());
                     }
 
                     if v.text.len() > 0 {
-                        self.subtitle
+                        event.subtitle
                             .entry(v.lang.to_string())
                             .or_insert_with(|| String::new())
                             .push_str(v.text.as_str());
@@ -74,7 +77,7 @@ impl EpgEvent {
                 },
                 Descriptor::Desc4E(v) => {
                     if v.text.len() > 0 {
-                        self.desc
+                        event.desc
                             .entry(v.lang.to_string())
                             .or_insert_with(|| String::new())
                             .push_str(v.text.as_str());
@@ -83,12 +86,13 @@ impl EpgEvent {
                 _ => (),
             };
         }
+
+        event
     }
 
     pub fn assemble_eit(&self, codepage: usize) -> EitItem {
         let mut eit_item = EitItem::default();
 
-        eit_item.event_id = self.id;
         eit_item.start = self.start;
         eit_item.duration = (self.stop - self.start) as u32;
         eit_item.status = 1;
@@ -124,29 +128,24 @@ impl EpgEvent {
 
 #[derive(Default, Debug)]
 pub struct EpgChannel {
+    pub event_id: usize,
     pub events: Vec<EpgEvent>,
 }
 
 impl EpgChannel {
-    pub fn parse_xml(&mut self, node: &xml::Node) {
-        let mut event = EpgEvent::default();
-        event.parse_xml(node);
-        self.events.push(event);
-    }
-
     pub fn parse_eit(&mut self, eit: &Eit) {
         for eit_item in eit.items.iter() {
-            let mut event = EpgEvent::default();
-            event.parse_eit(eit_item);
-            self.events.push(event);
+            self.events.push(EpgEvent::parse_eit(eit_item));
         }
+
+        self.sort();
     }
 
     pub fn sort(&mut self) {
         self.events.sort_by(|a, b| a.start.cmp(&b.start));
     }
 
-    pub fn assemble_eit(&self, event_id: u16, codepage: usize) -> Eit {
+    pub fn assemble_eit(&self, codepage: usize) -> Eit {
         let mut eit = Eit::default();
         eit.table_id = 0x50;
 
@@ -157,7 +156,7 @@ impl EpgChannel {
 
         for event in self.events.iter() {
             let mut eit_item = event.assemble_eit(codepage);
-            eit_item.event_id = event_id + eit.items.len() as u16;
+            eit_item.event_id = (self.event_id as usize + eit.items.len()) as u16;
             if current_time >= event.start && current_time < event.stop {
                 eit_item.status = 4;
             }
@@ -183,9 +182,14 @@ impl Epg {
                         None => continue,
                     };
 
-                    self.channels
+                    let channel = self.channels
                         .entry(id.to_string())
                         .or_insert(EpgChannel::default());
+
+                    channel.event_id = match i.get_attr("event_id") {
+                        Some(v) => usize::from_str_radix(v, 10).unwrap_or(0),
+                        None => 0,
+                    };
                 },
                 "programme" => {
                     let id = match i.get_attr("channel") {
@@ -198,7 +202,7 @@ impl Epg {
                         None => continue,
                     };
 
-                    channel.parse_xml(i);
+                    channel.events.push(EpgEvent::parse_xml(i));
                 },
                 _ => (),
             };
@@ -207,15 +211,6 @@ impl Epg {
         for (_, channel) in self.channels.iter_mut() {
             channel.sort();
         }
-    }
-
-    pub fn parse_eit(&mut self, eit: &Eit) {
-        let channel = self.channels
-            .entry(format!("{:04x}-{:04x}", eit.tsid, eit.pnr))
-            .or_insert_with(|| EpgChannel::default());
-
-        channel.parse_eit(eit);
-        channel.sort();
     }
 }
 

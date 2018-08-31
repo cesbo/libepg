@@ -57,6 +57,6 @@ fn test_parse_eit() {
     let mut eit = Eit::default();
     eit.parse(&psi);
 
-    let mut epg = Epg::default();
+    let mut epg = EpgChannel::default();
     epg.parse_eit(&eit);
 }
