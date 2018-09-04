@@ -17,10 +17,10 @@ impl EpgEvent {
     pub fn parse_xml(node: &xml::Node) -> EpgEvent {
         let mut event = EpgEvent::default();
 
-        for i in node.iter_attr() {
-            match i.key.as_str() {
-                "start" => event.start = parse_date(&i.value),
-                "stop" => event.stop = parse_date(&i.value),
+        for (key, value) in node.iter_attr() {
+            match key.as_str() {
+                "start" => event.start = parse_date(&value),
+                "stop" => event.stop = parse_date(&value),
                 _ => (),
             };
         }
@@ -88,6 +88,28 @@ impl EpgEvent {
         }
 
         event
+    }
+
+    pub fn assemble_xml(&self) -> xml::Node {
+        let mut node = xml::Node::default();
+        node.key.push_str("programme");
+
+        node.push_attr("start".to_string(), assemble_date(self.start));
+        node.push_attr("stop".to_string(), assemble_date(self.stop));
+
+        let push_child = |node: &mut xml::Node, key: &str, items: &HashMap<String, String>| for (lang, value) in items.iter() {
+            let mut x = xml::Node::default();
+            x.key.push_str(key);
+            x.push_attr("lang".to_string(), lang.to_string());
+            x.text.push_str(value);
+            node.push_child(x);
+        };
+
+        push_child(&mut node, "title", &self.title);
+        push_child(&mut node, "sub-title", &self.subtitle);
+        push_child(&mut node, "desc", &self.desc);
+
+        node
     }
 
     pub fn assemble_eit(&self, codepage: usize) -> EitItem {
@@ -212,60 +234,68 @@ impl Epg {
             channel.sort();
         }
     }
+
+    pub fn assemble_xml(&self) -> xml::Node {
+        let mut node = xml::Node::default();
+        node.key.push_str("tv");
+        node.push_attr("generator-info-name".to_string(), "Cesbo EPG".to_string());
+
+        for (id, _channel) in self.channels.iter() {
+            let mut x = xml::Node::default();
+            x.key.push_str("channel");
+            x.push_attr("id".to_string(), id.to_string());
+            // TODO: display-name
+            node.push_child(x);
+        }
+
+        for (id, channel) in self.channels.iter() {
+            for event in channel.events.iter() {
+                let mut x = event.assemble_xml();
+                x.push_attr("id".to_string(), id.to_string());
+                node.push_child(x);
+            }
+        }
+
+        node
+    }
 }
 
 //
 
 fn parse_date(s: &str) -> u64 {
+    if s.len() != 20 {
+        return 0;
+    }
+
     let mut x: u64 = 0;
 
-    if s.len() >= 14 {
-        // year
-        x += match u64::from_str_radix(&s[0 .. 4], 10) {
-            Ok(v) => (365 * v) + (v / 4) - (v / 100) + (v / 400),
-            _ => 0,
-        };
-        // month
-        x += match u64::from_str_radix(&s[4 .. 6], 10) {
-            Ok(v) => (3 * (v + 1) / 5) + (30 * v),
-            _ => 0,
-        };
-        // day
-        x += u64::from_str_radix(&s[6 .. 8], 10).unwrap_or(0);
+    let v = u64::from_str_radix(&s[0 .. 4], 10).unwrap_or(0);        // year
+    x += (365 * v) + (v / 4) - (v / 100) + (v / 400);
+    let v = u64::from_str_radix(&s[4 .. 6], 10).unwrap_or(0);       // month
+    x += (3 * (v + 1) / 5) + (30 * v);
+    x += u64::from_str_radix(&s[6 .. 8], 10).unwrap_or(0);          // day
 
-        x -= 719561;
-        x *= 86400;
+    x -= 719561;
+    x *= 86400;
 
-        // hout
-        x += match u64::from_str_radix(&s[8 .. 10], 10) {
-            Ok(v) => 3600 * v,
-            _ => 0,
-        };
-        // minute
-        x += match u64::from_str_radix(&s[10 .. 12], 10) {
-            Ok(v) => 60 * v,
-            _ => 0,
-        };
-        // second
-        x += u64::from_str_radix(&s[12 .. 14], 10).unwrap_or(0);
-    }
+    x += u64::from_str_radix(&s[8 .. 10], 10).unwrap_or(0) * 3600;  // hour
+    x += u64::from_str_radix(&s[10 .. 12], 10).unwrap_or(0) * 60;   // minute
+    x += u64::from_str_radix(&s[12 .. 14], 10).unwrap_or(0);        // second
 
-    if s.len() >= 20 {
-        let mut off: u64 = 0;
-        off += match u64::from_str_radix(&s[16 .. 18], 10) {
-            Ok(v) => v * 3600,
-            _ => 0,
-        };
-        off += match u64::from_str_radix(&s[18 .. 20], 10) {
-            Ok(v) => v * 60,
-            _ => 0,
-        };
-        match &s[15 .. 16] {
-            "-" => x += off,
-            "+" => x -= off,
-            _ => (),
-        };
-    }
+    let v =
+        u64::from_str_radix(&s[16 .. 18], 10).unwrap_or(0) * 3600 +
+        u64::from_str_radix(&s[18 .. 20], 10).unwrap_or(0) * 60;
+
+    match &s[15 .. 16] {
+        "-" => x += v,
+        "+" => x -= v,
+        _ => x = 0,
+    };
 
     x
+}
+
+fn assemble_date(d: u64) -> String {
+    // TODO: continue here...
+    d.to_string()
 }

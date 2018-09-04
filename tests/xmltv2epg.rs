@@ -12,7 +12,7 @@ fn test_parse_programme() {
 <title lang="en">Title</title>
 <desc lang="en">Desc</desc>
 </programme>"#;
-    let xml = xml::Node::parse(s).unwrap();
+    let xml = xml::Node::from_str(s).unwrap();
     let xml = xml.iter_child().next().unwrap();
     let p = EpgEvent::parse_xml(&xml);
     assert_eq!(p.start, 1216103400);
@@ -24,7 +24,7 @@ fn test_parse_programme() {
 #[test]
 fn test_parse_xmltv() {
     // parse xml
-    let xml = xml::Node::parse(EXAMPLE).unwrap();
+    let xml = xml::Node::from_str(EXAMPLE).unwrap();
     let xml = xml.iter_child().next().unwrap();
 
     // convert xmltv into epg
