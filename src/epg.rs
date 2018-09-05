@@ -1,16 +1,26 @@
 use std::collections::HashMap;
-use std::time::*;
+use chrono::prelude::*;
 
 use xml;
 use mpegts::psi::*;
 
 #[derive(Default, Debug, Clone)]
 pub struct EpgEvent {
-    pub start: u64,
-    pub stop: u64,
+    pub start: i64,
+    pub stop: i64,
     pub title: HashMap<String, String>,
     pub subtitle: HashMap<String, String>,
     pub desc: HashMap<String, String>,
+}
+
+const XMLTV_FMT: &str = "%Y%m%d%H%M%S %z";
+
+#[inline]
+fn parse_date(value: &str) -> i64 {
+    match DateTime::parse_from_str(value, XMLTV_FMT) {
+        Ok(v) => v.timestamp(),
+        Err(_) => 0,
+    }
 }
 
 impl EpgEvent {
@@ -56,7 +66,7 @@ impl EpgEvent {
         let mut event = EpgEvent::default();
 
         event.start = eit_item.start;
-        event.stop = eit_item.start + eit_item.duration as u64;
+        event.stop = eit_item.start + eit_item.duration as i64;
 
         for desc in eit_item.descriptors.iter() {
             match desc {
@@ -94,8 +104,8 @@ impl EpgEvent {
         let mut node = xml::Node::default();
         node.key.push_str("programme");
 
-        node.push_attr("start".to_string(), assemble_date(self.start));
-        node.push_attr("stop".to_string(), assemble_date(self.stop));
+        node.push_attr("start".to_string(), Utc.timestamp(self.start, 0).format(XMLTV_FMT).to_string());
+        node.push_attr("stop".to_string(), Utc.timestamp(self.stop, 0).format(XMLTV_FMT).to_string());
 
         let push_child = |node: &mut xml::Node, key: &str, items: &HashMap<String, String>| for (lang, value) in items.iter() {
             let mut x = xml::Node::default();
@@ -116,7 +126,7 @@ impl EpgEvent {
         let mut eit_item = EitItem::default();
 
         eit_item.start = self.start;
-        eit_item.duration = (self.stop - self.start) as u32;
+        eit_item.duration = (self.stop - self.start) as i32;
         eit_item.status = 1;
 
         for (lang, title) in self.title.iter() {
@@ -171,10 +181,7 @@ impl EpgChannel {
         let mut eit = Eit::default();
         eit.table_id = 0x50;
 
-        let current_time: u64 = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let current_time = Utc::now().timestamp();
 
         for event in self.events.iter() {
             let mut eit_item = event.assemble_eit(codepage);
@@ -258,44 +265,4 @@ impl Epg {
 
         node
     }
-}
-
-//
-
-fn parse_date(s: &str) -> u64 {
-    if s.len() != 20 {
-        return 0;
-    }
-
-    let mut x: u64 = 0;
-
-    let v = u64::from_str_radix(&s[0 .. 4], 10).unwrap_or(0);        // year
-    x += (365 * v) + (v / 4) - (v / 100) + (v / 400);
-    let v = u64::from_str_radix(&s[4 .. 6], 10).unwrap_or(0);       // month
-    x += (3 * (v + 1) / 5) + (30 * v);
-    x += u64::from_str_radix(&s[6 .. 8], 10).unwrap_or(0);          // day
-
-    x -= 719561;
-    x *= 86400;
-
-    x += u64::from_str_radix(&s[8 .. 10], 10).unwrap_or(0) * 3600;  // hour
-    x += u64::from_str_radix(&s[10 .. 12], 10).unwrap_or(0) * 60;   // minute
-    x += u64::from_str_radix(&s[12 .. 14], 10).unwrap_or(0);        // second
-
-    let v =
-        u64::from_str_radix(&s[16 .. 18], 10).unwrap_or(0) * 3600 +
-        u64::from_str_radix(&s[18 .. 20], 10).unwrap_or(0) * 60;
-
-    match &s[15 .. 16] {
-        "-" => x += v,
-        "+" => x -= v,
-        _ => x = 0,
-    };
-
-    x
-}
-
-fn assemble_date(d: u64) -> String {
-    // TODO: continue here...
-    d.to_string()
 }
