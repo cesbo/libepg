@@ -1,8 +1,13 @@
+use std::io;
 use std::collections::HashMap;
-use chrono::prelude::*;
 
-use xml;
 use mpegts::psi::*;
+use chrono::prelude::*;
+use xml::attribute::OwnedAttribute;
+
+use xml::reader::{self, ParserConfig, XmlEvent, Events};
+
+type XmlReaderResult = reader::Result<()>;
 
 #[derive(Default, Debug, Clone)]
 pub struct EpgEvent {
@@ -13,55 +18,17 @@ pub struct EpgEvent {
     pub desc: HashMap<String, String>,
 }
 
-const XMLTV_FMT: &str = "%Y%m%d%H%M%S %z";
+const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
 #[inline]
 fn parse_date(value: &str) -> i64 {
-    match DateTime::parse_from_str(value, XMLTV_FMT) {
+    match DateTime::parse_from_str(value, FMT_DATETIME) {
         Ok(v) => v.timestamp(),
         Err(_) => 0,
     }
 }
 
 impl EpgEvent {
-    pub fn parse_xml(node: &xml::Node) -> EpgEvent {
-        let mut event = EpgEvent::default();
-
-        for (key, value) in node.iter_attr() {
-            match key.as_str() {
-                "start" => event.start = parse_date(&value),
-                "stop" => event.stop = parse_date(&value),
-                _ => (),
-            };
-        }
-
-        for i in node.iter_child() {
-            match i.key.as_str() {
-                "title" => {
-                    match i.get_attr("lang") {
-                        Some(v) => event.title.insert(v.to_string(), i.text.clone()),
-                        None => continue,
-                    };
-                },
-                "sub-title" => {
-                    match i.get_attr("lang") {
-                        Some(v) => event.subtitle.insert(v.to_string(), i.text.clone()),
-                        None => continue,
-                    };
-                },
-                "desc" => {
-                    match i.get_attr("lang") {
-                        Some(v) => event.desc.insert(v.to_string(), i.text.clone()),
-                        None => continue,
-                    };
-                },
-                _ => (),
-            };
-        }
-
-        event
-    }
-
     pub fn parse_eit(eit_item: &EitItem) -> EpgEvent {
         let mut event = EpgEvent::default();
 
@@ -98,28 +65,6 @@ impl EpgEvent {
         }
 
         event
-    }
-
-    pub fn assemble_xml(&self) -> xml::Node {
-        let mut node = xml::Node::default();
-        node.key.push_str("programme");
-
-        node.push_attr("start".to_string(), Utc.timestamp(self.start, 0).format(XMLTV_FMT).to_string());
-        node.push_attr("stop".to_string(), Utc.timestamp(self.stop, 0).format(XMLTV_FMT).to_string());
-
-        let push_child = |node: &mut xml::Node, key: &str, items: &HashMap<String, String>| for (lang, value) in items.iter() {
-            let mut x = xml::Node::default();
-            x.key.push_str(key);
-            x.push_attr("lang".to_string(), lang.to_string());
-            x.text.push_str(value);
-            node.push_child(x);
-        };
-
-        push_child(&mut node, "title", &self.title);
-        push_child(&mut node, "sub-title", &self.subtitle);
-        push_child(&mut node, "desc", &self.desc);
-
-        node
     }
 
     pub fn assemble_eit(&self, codepage: usize) -> EitItem {
@@ -196,73 +141,161 @@ impl EpgChannel {
     }
 }
 
+fn skip_xml_element<R: io::Read>(parser: &mut Events<R>) -> XmlReaderResult {
+    let mut deep = 0;
+
+    while let Some(e) = parser.next() {
+        match e? {
+            XmlEvent::StartElement { .. } => deep += 1,
+            XmlEvent::EndElement { .. } if deep > 0 => deep -= 1,
+            XmlEvent::EndElement { .. } => return Ok(()),
+            _ => {},
+        };
+    }
+
+    unreachable!();
+}
+
+fn parse_xml_channel<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlReaderResult {
+    let mut id = String::new();
+    let mut event_id: usize = 0;
+
+    for attr in attrs.iter() {
+        match attr.name.local_name.as_str() {
+            "id" => id.push_str(&attr.value),
+            "event_id" => event_id = usize::from_str_radix(&attr.value, 10).unwrap_or(0),
+            _ => {},
+        };
+    }
+
+    if id.is_empty() {
+        return skip_xml_element(parser);
+    }
+
+    let channel = epg.channels
+        .entry(id)
+        .or_insert(EpgChannel::default());
+    channel.event_id = event_id;
+
+    while let Some(e) = parser.next() {
+        match e? {
+            XmlEvent::StartElement { .. } => skip_xml_element(parser)?,
+            XmlEvent::EndElement { .. } => return Ok(()),
+            _ => {},
+        };
+    }
+
+    unreachable!();
+}
+
+fn parse_xml_programme_info<R: io::Read>(info: &mut HashMap<String, String>, parser: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlReaderResult {
+    let mut lang = String::new();
+
+    for attr in attrs.iter() {
+        match attr.name.local_name.as_str() {
+            "lang" => lang.push_str(&attr.value),
+            _ => {},
+        };
+    }
+
+    let value = info
+        .entry(lang)
+        .or_insert_with(|| String::new());
+
+    while let Some(e) = parser.next() {
+        match e? {
+            XmlEvent::StartElement { .. } => skip_xml_element(parser)?,
+            XmlEvent::EndElement { .. } => return Ok(()),
+            XmlEvent::Characters(v) => value.push_str(&v),
+            _ => {},
+        };
+    }
+
+    unreachable!();
+}
+
+fn parse_xml_programme<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlReaderResult {
+    let mut id = String::new();
+    let mut start: i64 = 0;
+    let mut stop: i64 = 0;
+
+    for attr in attrs.iter() {
+        match attr.name.local_name.as_str() {
+            "channel" => id.push_str(&attr.value),
+            "start" => start = parse_date(&attr.value),
+            "stop" => stop = parse_date(&attr.value),
+            _ => {},
+        };
+    }
+
+    let channel = match epg.channels.get_mut(&id) {
+        Some(v) => v,
+        None => return skip_xml_element(parser),
+    };
+
+    let mut event = EpgEvent::default();
+    event.start = start;
+    event.stop = stop;
+
+    while let Some(e) = parser.next() {
+        match e? {
+            XmlEvent::StartElement { name, attributes, .. } => match name.local_name.as_str() {
+                "title" => parse_xml_programme_info(&mut event.title, parser, &attributes)?,
+                "sub-title" => parse_xml_programme_info(&mut event.subtitle, parser, &attributes)?,
+                "desc" => parse_xml_programme_info(&mut event.desc, parser, &attributes)?,
+                _ => skip_xml_element(parser)?,
+            },
+            XmlEvent::EndElement { .. } => {
+                channel.events.push(event);
+                return Ok(());
+            },
+            _ => {},
+        };
+    }
+
+    unreachable!();
+}
+
+fn parse_xml_tv<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>) -> XmlReaderResult {
+    while let Some(e) = parser.next() {
+        match e? {
+            XmlEvent::StartElement { name, attributes, .. } => {
+                match name.local_name.as_str() {
+                    "tv" => {},
+                    "channel" => parse_xml_channel(epg, parser, &attributes)?,
+                    "programme" => parse_xml_programme(epg, parser, &attributes)?,
+                    _ => skip_xml_element(parser)?,
+                };
+            },
+            XmlEvent::EndDocument => return Ok(()),
+            _ => {},
+        };
+    }
+
+    unreachable!();
+}
+
 #[derive(Default, Debug)]
 pub struct Epg {
     pub channels: HashMap<String, EpgChannel>,
 }
 
 impl Epg {
-    pub fn parse_xml(&mut self, node: &xml::Node) {
-        for i in node.iter_child() {
-            match i.key.as_str() {
-                "channel" => {
-                    let id = match i.get_attr("id") {
-                        Some(v) => v,
-                        None => continue,
-                    };
+    pub fn parse_xml<R: io::Read>(&mut self, src: R) -> Result<(), String> {
+        let mut parser = ParserConfig::new()
+            .trim_whitespace(true)
+            .ignore_comments(true)
+            .create_reader(src)
+            .into_iter();
 
-                    let channel = self.channels
-                        .entry(id.to_string())
-                        .or_insert(EpgChannel::default());
-
-                    channel.event_id = match i.get_attr("event_id") {
-                        Some(v) => usize::from_str_radix(v, 10).unwrap_or(0),
-                        None => 0,
-                    };
-                },
-                "programme" => {
-                    let id = match i.get_attr("channel") {
-                        Some(v) => v,
-                        None => continue,
-                    };
-
-                    let channel = match self.channels.get_mut(id) {
-                        Some(v) => v,
-                        None => continue,
-                    };
-
-                    channel.events.push(EpgEvent::parse_xml(i));
-                },
-                _ => (),
-            };
+        if let Err(e) = parse_xml_tv(self, &mut parser) {
+            return Err(format!("Failed to parse XML. {}", e));
         }
 
         for (_, channel) in self.channels.iter_mut() {
             channel.sort();
         }
-    }
 
-    pub fn assemble_xml(&self) -> xml::Node {
-        let mut node = xml::Node::default();
-        node.key.push_str("tv");
-        node.push_attr("generator-info-name".to_string(), "Cesbo EPG".to_string());
-
-        for (id, _channel) in self.channels.iter() {
-            let mut x = xml::Node::default();
-            x.key.push_str("channel");
-            x.push_attr("id".to_string(), id.to_string());
-            // TODO: display-name
-            node.push_child(x);
-        }
-
-        for (id, channel) in self.channels.iter() {
-            for event in channel.events.iter() {
-                let mut x = event.assemble_xml();
-                x.push_attr("id".to_string(), id.to_string());
-                node.push_child(x);
-            }
-        }
-
-        node
+        Ok(())
     }
 }

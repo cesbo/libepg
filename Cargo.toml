@@ -5,5 +5,5 @@ authors = ["Andrey Dyldin <and@cesbo.com>"]
 
 [dependencies]
 mpegts = { path = "../libmpegts" }
-xml = { path = "../libxml" }
 chrono = "0.4.6"
+xml-rs = "0.8.0"

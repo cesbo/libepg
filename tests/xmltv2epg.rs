@@ -1,20 +1,16 @@
 extern crate epg;
-extern crate xml;
-
 use epg::*;
-
-mod data;
-use data::*;
 
 #[test]
 fn test_parse_programme() {
-    let s = r#"<programme start="20080715003000 -0600" stop="20080715003000 +0600" channel="id-1">
-<title lang="en">Title</title>
-<desc lang="en">Desc</desc>
-</programme>"#;
-    let xml = xml::Node::from_str(s).unwrap();
-    let xml = xml.iter_child().next().unwrap();
-    let p = EpgEvent::parse_xml(&xml);
+    let content: &[u8] = include_bytes!("docs/e1.xml");
+
+    // convert xmltv into epg
+    let mut epg = Epg::default();
+    epg.parse_xml(content).unwrap();
+    let p = epg.channels.get("id-1").unwrap().events.get(0).unwrap();
+
+    // check event
     assert_eq!(p.start, 1216103400);
     assert_eq!(p.stop, 1216060200);
     assert_eq!(p.title.get("en").unwrap(), "Title");
@@ -23,13 +19,12 @@ fn test_parse_programme() {
 
 #[test]
 fn test_parse_xmltv() {
-    // parse xml
-    let xml = xml::Node::from_str(EXAMPLE).unwrap();
-    let xml = xml.iter_child().next().unwrap();
+    let content: &[u8] = include_bytes!("docs/e2.xml");
 
     // convert xmltv into epg
     let mut epg = Epg::default();
-    epg.parse_xml(&xml);
+    epg.parse_xml(content).unwrap();
+
     // get channel events
     let mut events_iter = epg.channels.get("id-1").unwrap().events.iter();
     // check event

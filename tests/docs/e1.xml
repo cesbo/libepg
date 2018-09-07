@@ -1,0 +1,7 @@
+<tv>
+<channel id="id-1"><display-name lang="en">Test</display-name></channel>
+<programme start="20080715003000 -0600" stop="20080715003000 +0600" channel="id-1">
+    <title lang="en">Title</title>
+    <desc lang="en">Desc</desc>
+</programme>
+</tv>
