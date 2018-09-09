@@ -5,9 +5,10 @@ use mpegts::psi::*;
 use chrono::prelude::*;
 use xml::attribute::OwnedAttribute;
 
-use xml::reader::{self, ParserConfig, XmlEvent, Events};
+use xml;
+use xml::reader::{ParserConfig, XmlEvent, Events};
 
-type XmlReaderResult = reader::Result<()>;
+type XmlReaderResult = xml::reader::Result<()>;
 
 #[derive(Default, Debug, Clone)]
 pub struct EpgEvent {
@@ -141,10 +142,10 @@ impl EpgChannel {
     }
 }
 
-fn skip_xml_element<R: io::Read>(parser: &mut Events<R>) -> XmlReaderResult {
+fn skip_xml_element<R: io::Read>(reader: &mut Events<R>) -> XmlReaderResult {
     let mut deep = 0;
 
-    while let Some(e) = parser.next() {
+    while let Some(e) = reader.next() {
         match e? {
             XmlEvent::StartElement { .. } => deep += 1,
             XmlEvent::EndElement { .. } if deep > 0 => deep -= 1,
@@ -156,7 +157,7 @@ fn skip_xml_element<R: io::Read>(parser: &mut Events<R>) -> XmlReaderResult {
     unreachable!();
 }
 
-fn parse_xml_channel<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlReaderResult {
+fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlReaderResult {
     let mut id = String::new();
     let mut event_id: usize = 0;
 
@@ -169,7 +170,7 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>, attrs: 
     }
 
     if id.is_empty() {
-        return skip_xml_element(parser);
+        return skip_xml_element(reader);
     }
 
     let channel = epg.channels
@@ -177,9 +178,9 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>, attrs: 
         .or_insert(EpgChannel::default());
     channel.event_id = event_id;
 
-    while let Some(e) = parser.next() {
+    while let Some(e) = reader.next() {
         match e? {
-            XmlEvent::StartElement { .. } => skip_xml_element(parser)?,
+            XmlEvent::StartElement { .. } => skip_xml_element(reader)?,
             XmlEvent::EndElement { .. } => return Ok(()),
             _ => {},
         };
@@ -188,7 +189,7 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>, attrs: 
     unreachable!();
 }
 
-fn parse_xml_programme_info<R: io::Read>(info: &mut HashMap<String, String>, parser: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlReaderResult {
+fn parse_xml_programme_info<R: io::Read>(info: &mut HashMap<String, String>, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlReaderResult {
     let mut lang = String::new();
 
     for attr in attrs.iter() {
@@ -202,9 +203,9 @@ fn parse_xml_programme_info<R: io::Read>(info: &mut HashMap<String, String>, par
         .entry(lang)
         .or_insert_with(|| String::new());
 
-    while let Some(e) = parser.next() {
+    while let Some(e) = reader.next() {
         match e? {
-            XmlEvent::StartElement { .. } => skip_xml_element(parser)?,
+            XmlEvent::StartElement { .. } => skip_xml_element(reader)?,
             XmlEvent::EndElement { .. } => return Ok(()),
             XmlEvent::Characters(v) => value.push_str(&v),
             _ => {},
@@ -214,7 +215,7 @@ fn parse_xml_programme_info<R: io::Read>(info: &mut HashMap<String, String>, par
     unreachable!();
 }
 
-fn parse_xml_programme<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlReaderResult {
+fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlReaderResult {
     let mut id = String::new();
     let mut start: i64 = 0;
     let mut stop: i64 = 0;
@@ -230,20 +231,20 @@ fn parse_xml_programme<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>, attrs
 
     let channel = match epg.channels.get_mut(&id) {
         Some(v) => v,
-        None => return skip_xml_element(parser),
+        None => return skip_xml_element(reader),
     };
 
     let mut event = EpgEvent::default();
     event.start = start;
     event.stop = stop;
 
-    while let Some(e) = parser.next() {
+    while let Some(e) = reader.next() {
         match e? {
             XmlEvent::StartElement { name, attributes, .. } => match name.local_name.as_str() {
-                "title" => parse_xml_programme_info(&mut event.title, parser, &attributes)?,
-                "sub-title" => parse_xml_programme_info(&mut event.subtitle, parser, &attributes)?,
-                "desc" => parse_xml_programme_info(&mut event.desc, parser, &attributes)?,
-                _ => skip_xml_element(parser)?,
+                "title" => parse_xml_programme_info(&mut event.title, reader, &attributes)?,
+                "sub-title" => parse_xml_programme_info(&mut event.subtitle, reader, &attributes)?,
+                "desc" => parse_xml_programme_info(&mut event.desc, reader, &attributes)?,
+                _ => skip_xml_element(reader)?,
             },
             XmlEvent::EndElement { .. } => {
                 channel.events.push(event);
@@ -256,15 +257,15 @@ fn parse_xml_programme<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>, attrs
     unreachable!();
 }
 
-fn parse_xml_tv<R: io::Read>(epg: &mut Epg, parser: &mut Events<R>) -> XmlReaderResult {
-    while let Some(e) = parser.next() {
+fn parse_xml_tv<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>) -> XmlReaderResult {
+    while let Some(e) = reader.next() {
         match e? {
             XmlEvent::StartElement { name, attributes, .. } => {
                 match name.local_name.as_str() {
                     "tv" => {},
-                    "channel" => parse_xml_channel(epg, parser, &attributes)?,
-                    "programme" => parse_xml_programme(epg, parser, &attributes)?,
-                    _ => skip_xml_element(parser)?,
+                    "channel" => parse_xml_channel(epg, reader, &attributes)?,
+                    "programme" => parse_xml_programme(epg, reader, &attributes)?,
+                    _ => skip_xml_element(reader)?,
                 };
             },
             XmlEvent::EndDocument => return Ok(()),
@@ -282,13 +283,13 @@ pub struct Epg {
 
 impl Epg {
     pub fn parse_xml<R: io::Read>(&mut self, src: R) -> Result<(), String> {
-        let mut parser = ParserConfig::new()
+        let mut reader = ParserConfig::new()
             .trim_whitespace(true)
             .ignore_comments(true)
             .create_reader(src)
             .into_iter();
 
-        if let Err(e) = parse_xml_tv(self, &mut parser) {
+        if let Err(e) = parse_xml_tv(self, &mut reader) {
             return Err(format!("Failed to parse XML. {}", e));
         }
 
