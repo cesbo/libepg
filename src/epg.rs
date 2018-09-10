@@ -4,11 +4,18 @@ use std::collections::HashMap;
 use mpegts::psi::*;
 use chrono::prelude::*;
 use xml::attribute::OwnedAttribute;
+use xml::common::XmlVersion;
 
-use xml;
-use xml::reader::{ParserConfig, XmlEvent, Events};
+use xml::reader::{ParserConfig, Events};
+use xml::reader::Result as XmlReaderResultBase;
+use xml::reader::XmlEvent as XmlReaderEvent;
 
-type XmlReaderResult = xml::reader::Result<()>;
+use xml::writer::{EmitterConfig, EventWriter};
+use xml::writer::Result as XmlWriterResultBase;
+use xml::writer::XmlEvent as XmlWriterEvent;
+
+type XmlReaderResult = XmlReaderResultBase<()>;
+type XmlWriterResult = XmlWriterResultBase<()>;
 
 #[derive(Default, Debug, Clone)]
 pub struct EpgEvent {
@@ -147,9 +154,9 @@ fn skip_xml_element<R: io::Read>(reader: &mut Events<R>) -> XmlReaderResult {
 
     while let Some(e) = reader.next() {
         match e? {
-            XmlEvent::StartElement { .. } => deep += 1,
-            XmlEvent::EndElement { .. } if deep > 0 => deep -= 1,
-            XmlEvent::EndElement { .. } => return Ok(()),
+            XmlReaderEvent::StartElement { .. } => deep += 1,
+            XmlReaderEvent::EndElement { .. } if deep > 0 => deep -= 1,
+            XmlReaderEvent::EndElement { .. } => return Ok(()),
             _ => {},
         };
     }
@@ -180,8 +187,8 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: 
 
     while let Some(e) = reader.next() {
         match e? {
-            XmlEvent::StartElement { .. } => skip_xml_element(reader)?,
-            XmlEvent::EndElement { .. } => return Ok(()),
+            XmlReaderEvent::StartElement { .. } => skip_xml_element(reader)?,
+            XmlReaderEvent::EndElement { .. } => return Ok(()),
             _ => {},
         };
     }
@@ -205,9 +212,9 @@ fn parse_xml_programme_info<R: io::Read>(info: &mut HashMap<String, String>, rea
 
     while let Some(e) = reader.next() {
         match e? {
-            XmlEvent::StartElement { .. } => skip_xml_element(reader)?,
-            XmlEvent::EndElement { .. } => return Ok(()),
-            XmlEvent::Characters(v) => value.push_str(&v),
+            XmlReaderEvent::StartElement { .. } => skip_xml_element(reader)?,
+            XmlReaderEvent::EndElement { .. } => return Ok(()),
+            XmlReaderEvent::Characters(v) => value.push_str(&v),
             _ => {},
         };
     }
@@ -240,13 +247,13 @@ fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs
 
     while let Some(e) = reader.next() {
         match e? {
-            XmlEvent::StartElement { name, attributes, .. } => match name.local_name.as_str() {
+            XmlReaderEvent::StartElement { name, attributes, .. } => match name.local_name.as_str() {
                 "title" => parse_xml_programme_info(&mut event.title, reader, &attributes)?,
                 "sub-title" => parse_xml_programme_info(&mut event.subtitle, reader, &attributes)?,
                 "desc" => parse_xml_programme_info(&mut event.desc, reader, &attributes)?,
                 _ => skip_xml_element(reader)?,
             },
-            XmlEvent::EndElement { .. } => {
+            XmlReaderEvent::EndElement { .. } => {
                 channel.events.push(event);
                 return Ok(());
             },
@@ -260,7 +267,7 @@ fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs
 fn parse_xml_tv<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>) -> XmlReaderResult {
     while let Some(e) = reader.next() {
         match e? {
-            XmlEvent::StartElement { name, attributes, .. } => {
+            XmlReaderEvent::StartElement { name, attributes, .. } => {
                 match name.local_name.as_str() {
                     "tv" => {},
                     "channel" => parse_xml_channel(epg, reader, &attributes)?,
@@ -268,12 +275,80 @@ fn parse_xml_tv<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>) -> XmlReader
                     _ => skip_xml_element(reader)?,
                 };
             },
-            XmlEvent::EndDocument => return Ok(()),
+            XmlReaderEvent::EndDocument => return Ok(()),
             _ => {},
         };
     }
 
     unreachable!();
+}
+
+fn assemble_xml_channel<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlWriterResult {
+    for (id, channel) in epg.channels.iter() {
+        w.write(XmlWriterEvent::start_element("channel")
+            .attr("id", id)
+            .attr("event_id", &channel.event_id.to_string()))?;
+        // TODO: channel names
+        w.write(XmlWriterEvent::start_element("display-name")
+            .attr("lang", "en"))?;
+        w.write(XmlWriterEvent::Characters("TODO"))?;
+        w.write(XmlWriterEvent::end_element())?;
+        w.write(XmlWriterEvent::end_element())?;
+        w.write(XmlWriterEvent::Characters("\n"))?;
+    }
+
+    Ok(())
+}
+
+fn assemble_xml_programme_info<W: io::Write>(info: &HashMap<String, String>, w: &mut EventWriter<W>, name: &str) -> XmlWriterResult {
+    for (lang, text) in info.iter() {
+        w.write(XmlWriterEvent::start_element(name)
+            .attr("lang", lang))?;
+        w.write(XmlWriterEvent::Characters(text))?;
+        w.write(XmlWriterEvent::end_element())?;
+    }
+
+    Ok(())
+}
+
+fn assemble_xml_programme<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlWriterResult {
+    for (id, channel) in epg.channels.iter() {
+        for event in channel.events.iter() {
+            // TODO: fix timezone
+            w.write(XmlWriterEvent::start_element("programme")
+                .attr("channel", id)
+                .attr("start", &Local.timestamp(event.start, 0).format(FMT_DATETIME).to_string())
+                .attr("stop", &Local.timestamp(event.stop, 0).format(FMT_DATETIME).to_string()))?;
+
+            assemble_xml_programme_info(&event.title, w, "title")?;
+            assemble_xml_programme_info(&event.subtitle, w, "sub-title")?;
+            assemble_xml_programme_info(&event.desc, w, "desc")?;
+
+            w.write(XmlWriterEvent::end_element())?;
+            w.write(XmlWriterEvent::Characters("\n"))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn assemble_xml_tv<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlWriterResult {
+    w.write(XmlWriterEvent::StartDocument {
+        version: XmlVersion::Version10,
+        encoding: Some("utf-8"),
+        standalone: None,
+    })?;
+    w.write(XmlWriterEvent::Characters("\n"))?;
+    w.write(XmlWriterEvent::start_element("tv")
+        .attr("generator-info-name", "Cesbo Astra")
+        .attr("generator-info-url", "https://cesbo.com"))?;
+    w.write(XmlWriterEvent::Characters("\n"))?;
+
+    assemble_xml_channel(epg, w)?;
+    assemble_xml_programme(epg, w)?;
+
+    w.write(XmlWriterEvent::end_element())?;
+    Ok(())
 }
 
 #[derive(Default, Debug)]
@@ -290,13 +365,24 @@ impl Epg {
             .into_iter();
 
         if let Err(e) = parse_xml_tv(self, &mut reader) {
-            return Err(format!("Failed to parse XML. {}", e));
+            Err(format!("{}", e))
+        } else {
+            for (_, channel) in self.channels.iter_mut() {
+                channel.sort();
+            }
+            Ok(())
         }
+    }
 
-        for (_, channel) in self.channels.iter_mut() {
-            channel.sort();
+    pub fn assemble_xml<W: io::Write>(&self, dst: W) -> Result<(), String> {
+        let mut writer = EmitterConfig::new()
+            .write_document_declaration(false)
+            .create_writer(dst);
+
+        if let Err(e) = assemble_xml_tv(self, &mut writer) {
+            Err(format!("{}", e))
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 }
