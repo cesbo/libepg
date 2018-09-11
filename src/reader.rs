@@ -35,12 +35,10 @@ fn skip_xml_element<R: io::Read>(reader: &mut Events<R>) -> XmlResult {
 
 fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlResult {
     let mut id = String::new();
-    let mut event_id: usize = 0;
 
     for attr in attrs.iter() {
         match attr.name.local_name.as_str() {
             "id" => id.push_str(&attr.value),
-            "event_id" => event_id = usize::from_str_radix(&attr.value, 10).unwrap_or(0),
             _ => {},
         };
     }
@@ -52,7 +50,6 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: 
     let channel = epg.channels
         .entry(id)
         .or_insert(EpgChannel::default());
-    channel.event_id = event_id;
 
     while let Some(e) = reader.next() {
         match e? {
@@ -92,25 +89,28 @@ fn parse_xml_programme_info<R: io::Read>(info: &mut HashMap<String, String>, rea
 }
 
 fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlResult {
-    let mut id = String::new();
+    let mut channel = String::new();
+    let mut event_id: u16 = 0;
     let mut start: i64 = 0;
     let mut stop: i64 = 0;
 
     for attr in attrs.iter() {
         match attr.name.local_name.as_str() {
-            "channel" => id.push_str(&attr.value),
+            "channel" => channel.push_str(&attr.value),
+            "id" => event_id = u16::from_str_radix(&attr.value, 10).unwrap_or(0),
             "start" => start = parse_date(&attr.value),
             "stop" => stop = parse_date(&attr.value),
             _ => {},
         };
     }
 
-    let channel = match epg.channels.get_mut(&id) {
+    let channel = match epg.channels.get_mut(&channel) {
         Some(v) => v,
         None => return skip_xml_element(reader),
     };
 
     let mut event = EpgEvent::default();
+    event.event_id = event_id;
     event.start = start;
     event.stop = stop;
 

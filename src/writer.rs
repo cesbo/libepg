@@ -13,8 +13,7 @@ type XmlResult = Result<()>;
 fn assemble_xml_channel<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResult {
     for (id, channel) in epg.channels.iter() {
         w.write(XmlEvent::start_element("channel")
-            .attr("id", id)
-            .attr("event_id", &channel.event_id.to_string()))?;
+            .attr("id", id))?;
         // TODO: channel names
         w.write(XmlEvent::start_element("display-name")
             .attr("lang", "en"))?;
@@ -44,6 +43,7 @@ fn assemble_xml_programme<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> Xm
             // TODO: fix local timezone
             w.write(XmlEvent::start_element("programme")
                 .attr("channel", id)
+                .attr("id", &event.event_id.to_string())
                 .attr("start", &Local.timestamp(event.start, 0).format(FMT_DATETIME).to_string())
                 .attr("stop", &Local.timestamp(event.stop, 0).format(FMT_DATETIME).to_string()))?;
 

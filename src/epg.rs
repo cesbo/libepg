@@ -14,6 +14,7 @@ pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
 #[derive(Default, Debug, Clone)]
 pub struct EpgEvent {
+    pub event_id: u16,
     pub start: i64,
     pub stop: i64,
     pub title: HashMap<String, String>,
@@ -25,6 +26,7 @@ impl EpgEvent {
     pub fn parse_eit(eit_item: &EitItem) -> EpgEvent {
         let mut event = EpgEvent::default();
 
+        event.event_id = eit_item.event_id;
         event.start = eit_item.start;
         event.stop = eit_item.start + eit_item.duration as i64;
 
@@ -63,6 +65,7 @@ impl EpgEvent {
     pub fn assemble_eit(&self, codepage: usize) -> EitItem {
         let mut eit_item = EitItem::default();
 
+        eit_item.event_id = self.event_id;
         eit_item.start = self.start;
         eit_item.duration = (self.stop - self.start) as i32;
         eit_item.status = 1;
@@ -98,7 +101,6 @@ impl EpgEvent {
 
 #[derive(Default, Debug)]
 pub struct EpgChannel {
-    pub event_id: usize,
     pub events: Vec<EpgEvent>,
 }
 
@@ -113,6 +115,16 @@ impl EpgChannel {
 
     pub fn sort(&mut self) {
         self.events.sort_by(|a, b| a.start.cmp(&b.start));
+
+        let mut events = self.events.iter_mut();
+
+        if let Some(event) = events.next() {
+            let mut event_id: u16 = event.event_id;
+            while let Some(event) = events.next() {
+                event_id = event_id.wrapping_add(1);
+                event.event_id = event_id;
+            }
+        }
     }
 
     pub fn assemble_eit(&self, codepage: usize) -> Eit {
@@ -123,7 +135,6 @@ impl EpgChannel {
 
         for event in self.events.iter() {
             let mut eit_item = event.assemble_eit(codepage);
-            eit_item.event_id = (self.event_id as usize + eit.items.len()) as u16;
             if current_time >= event.start && current_time < event.stop {
                 eit_item.status = 4;
             }
