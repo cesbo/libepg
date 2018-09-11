@@ -101,6 +101,7 @@ impl EpgEvent {
 
 #[derive(Default, Debug)]
 pub struct EpgChannel {
+    pub name: HashMap<String, String>,
     pub events: Vec<EpgEvent>,
 }
 
@@ -117,7 +118,6 @@ impl EpgChannel {
         self.events.sort_by(|a, b| a.start.cmp(&b.start));
 
         let mut events = self.events.iter_mut();
-
         if let Some(event) = events.next() {
             let mut event_id: u16 = event.event_id;
             while let Some(event) = events.next() {

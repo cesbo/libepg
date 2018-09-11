@@ -33,6 +33,32 @@ fn skip_xml_element<R: io::Read>(reader: &mut Events<R>) -> XmlResult {
     unreachable!();
 }
 
+fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlResult {
+    let mut lang = String::new();
+
+    for attr in attrs.iter() {
+        match attr.name.local_name.as_str() {
+            "lang" => lang.push_str(&attr.value),
+            _ => {},
+        };
+    }
+
+    let value = map
+        .entry(lang)
+        .or_insert_with(|| String::new());
+
+    while let Some(e) = reader.next() {
+        match e? {
+            XmlEvent::StartElement { .. } => skip_xml_element(reader)?,
+            XmlEvent::EndElement { .. } => return Ok(()),
+            XmlEvent::Characters(v) => value.push_str(&v),
+            _ => {},
+        };
+    }
+
+    unreachable!();
+}
+
 fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlResult {
     let mut id = String::new();
 
@@ -53,34 +79,11 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: 
 
     while let Some(e) = reader.next() {
         match e? {
-            XmlEvent::StartElement { .. } => skip_xml_element(reader)?,
+            XmlEvent::StartElement { name, attributes, .. } => match name.local_name.as_str() {
+                "display-name" => parse_xml_value(&mut channel.name, reader, &attributes)?,
+                _ => skip_xml_element(reader)?,
+            },
             XmlEvent::EndElement { .. } => return Ok(()),
-            _ => {},
-        };
-    }
-
-    unreachable!();
-}
-
-fn parse_xml_programme_info<R: io::Read>(info: &mut HashMap<String, String>, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlResult {
-    let mut lang = String::new();
-
-    for attr in attrs.iter() {
-        match attr.name.local_name.as_str() {
-            "lang" => lang.push_str(&attr.value),
-            _ => {},
-        };
-    }
-
-    let value = info
-        .entry(lang)
-        .or_insert_with(|| String::new());
-
-    while let Some(e) = reader.next() {
-        match e? {
-            XmlEvent::StartElement { .. } => skip_xml_element(reader)?,
-            XmlEvent::EndElement { .. } => return Ok(()),
-            XmlEvent::Characters(v) => value.push_str(&v),
             _ => {},
         };
     }
@@ -117,9 +120,9 @@ fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs
     while let Some(e) = reader.next() {
         match e? {
             XmlEvent::StartElement { name, attributes, .. } => match name.local_name.as_str() {
-                "title" => parse_xml_programme_info(&mut event.title, reader, &attributes)?,
-                "sub-title" => parse_xml_programme_info(&mut event.subtitle, reader, &attributes)?,
-                "desc" => parse_xml_programme_info(&mut event.desc, reader, &attributes)?,
+                "title" => parse_xml_value(&mut event.title, reader, &attributes)?,
+                "sub-title" => parse_xml_value(&mut event.subtitle, reader, &attributes)?,
+                "desc" => parse_xml_value(&mut event.desc, reader, &attributes)?,
                 _ => skip_xml_element(reader)?,
             },
             XmlEvent::EndElement { .. } => {

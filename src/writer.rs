@@ -10,28 +10,25 @@ use epg::{Epg, FMT_DATETIME};
 
 type XmlResult = Result<()>;
 
-fn assemble_xml_channel<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResult {
-    for (id, channel) in epg.channels.iter() {
-        w.write(XmlEvent::start_element("channel")
-            .attr("id", id))?;
-        // TODO: channel names
-        w.write(XmlEvent::start_element("display-name")
-            .attr("lang", "en"))?;
-        w.write(XmlEvent::Characters("TODO"))?;
-        w.write(XmlEvent::end_element())?;
-        w.write(XmlEvent::end_element())?;
-        w.write(XmlEvent::Characters("\n"))?;
-    }
-
-    Ok(())
-}
-
-fn assemble_xml_programme_info<W: io::Write>(info: &HashMap<String, String>, w: &mut EventWriter<W>, name: &str) -> XmlResult {
-    for (lang, text) in info.iter() {
+fn assemble_xml_value<W: io::Write>(map: &HashMap<String, String>, w: &mut EventWriter<W>, name: &str) -> XmlResult {
+    for (lang, text) in map.iter() {
         w.write(XmlEvent::start_element(name)
             .attr("lang", lang))?;
         w.write(XmlEvent::Characters(text))?;
         w.write(XmlEvent::end_element())?;
+    }
+    Ok(())
+}
+
+fn assemble_xml_channel<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResult {
+    for (id, channel) in epg.channels.iter() {
+        w.write(XmlEvent::start_element("channel")
+            .attr("id", id))?;
+
+        assemble_xml_value(&channel.name, w, "display-name")?;
+
+        w.write(XmlEvent::end_element())?;
+        w.write(XmlEvent::Characters("\n"))?;
     }
 
     Ok(())
@@ -40,16 +37,15 @@ fn assemble_xml_programme_info<W: io::Write>(info: &HashMap<String, String>, w: 
 fn assemble_xml_programme<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResult {
     for (id, channel) in epg.channels.iter() {
         for event in channel.events.iter() {
-            // TODO: fix local timezone
             w.write(XmlEvent::start_element("programme")
                 .attr("channel", id)
                 .attr("id", &event.event_id.to_string())
                 .attr("start", &Local.timestamp(event.start, 0).format(FMT_DATETIME).to_string())
                 .attr("stop", &Local.timestamp(event.stop, 0).format(FMT_DATETIME).to_string()))?;
 
-            assemble_xml_programme_info(&event.title, w, "title")?;
-            assemble_xml_programme_info(&event.subtitle, w, "sub-title")?;
-            assemble_xml_programme_info(&event.desc, w, "desc")?;
+            assemble_xml_value(&event.title, w, "title")?;
+            assemble_xml_value(&event.subtitle, w, "sub-title")?;
+            assemble_xml_value(&event.desc, w, "desc")?;
 
             w.write(XmlEvent::end_element())?;
             w.write(XmlEvent::Characters("\n"))?;
