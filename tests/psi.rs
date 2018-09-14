@@ -8,6 +8,7 @@ use epg::*;
 
 use std::io::prelude::*;
 use std::fs::File;
+use std::str;
 
 pub static EIT_50: &[u8] = &[
     0x47, 0x40, 0x12, 0x14, 0x00, 0x50, 0xf2, 0x21, 0x1c, 0xcf, 0xeb, 0x00, 0x00, 0x1c, 0xe8, 0x00,
@@ -64,4 +65,32 @@ fn test_parse_eit() {
 
     let mut epg = EpgChannel::default();
     epg.parse_eit(&eit);
+}
+
+#[test]
+fn test_ts_to_xmltv() {
+    let mut psi = Psi::default();
+
+    let mut skip = 0;
+    while skip < EIT_50.len() {
+        psi.mux(&EIT_50[skip ..]);
+        skip += 188;
+    }
+    assert!(psi.check());
+
+    let mut eit = Eit::default();
+    eit.parse(&psi);
+
+    let mut channel = EpgChannel::default();
+    channel.parse_eit(&eit);
+    channel.name.insert("pl".to_string(), "Test".to_string());
+
+    let mut epg = Epg::default();
+    epg.channels.insert("id-1".to_string(), channel);
+
+    let mut dst: Vec<u8> = Vec::new();
+    epg.assemble_xml(&mut dst).unwrap();
+
+    let xml = str::from_utf8(&dst).unwrap();
+    println!("{}", xml);
 }
