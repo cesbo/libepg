@@ -7,13 +7,18 @@ use xml::common::XmlVersion;
 use xml::writer::{Result, EventWriter, XmlEvent};
 
 use epg::{Epg, FMT_DATETIME};
+use mpegts::textcode;
 
 type XmlResult = Result<()>;
 
 fn assemble_xml_value<W: io::Write>(map: &HashMap<String, String>, w: &mut EventWriter<W>, name: &str) -> XmlResult {
     for (lang, text) in map.iter() {
-        w.write(XmlEvent::start_element(name)
-            .attr("lang", lang))?;
+        let lang = match textcode::lang::convert(lang) {
+            Some(v) => v,
+            None => continue,
+        };
+
+        w.write(XmlEvent::start_element(name).attr("lang", lang))?;
         w.write(XmlEvent::Characters(text))?;
         w.write(XmlEvent::end_element())?;
     }

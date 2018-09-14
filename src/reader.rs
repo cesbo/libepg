@@ -7,6 +7,7 @@ use xml::attribute::OwnedAttribute;
 use xml::reader::{Result, Events, XmlEvent};
 
 use epg::{Epg, EpgChannel, EpgEvent, FMT_DATETIME};
+use mpegts::textcode;
 
 type XmlResult = Result<()>;
 
@@ -38,9 +39,18 @@ fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut 
 
     for attr in attrs.iter() {
         match attr.name.local_name.as_str() {
-            "lang" => lang.push_str(&attr.value),
+            "lang" => {
+                match textcode::lang::convert(&attr.value) {
+                    Some(v) => lang.push_str(v),
+                    None => {},
+                };
+            },
             _ => {},
         };
+    }
+
+    if lang.is_empty() {
+        return skip_xml_element(reader);
     }
 
     let value = map
