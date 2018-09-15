@@ -22,7 +22,7 @@ fn parse_date(value: &str) -> i64 {
 fn skip_xml_element<R: io::Read>(reader: &mut Events<R>) -> XmlResult {
     let mut deep = 0;
 
-    while let Some(e) = reader.next() {
+    for e in reader {
         match e? {
             XmlEvent::StartElement { .. } => deep += 1,
             XmlEvent::EndElement { .. } if deep > 0 => deep -= 1,
@@ -34,19 +34,15 @@ fn skip_xml_element<R: io::Read>(reader: &mut Events<R>) -> XmlResult {
     unreachable!();
 }
 
-fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlResult {
+fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
     let mut lang = String::new();
 
     for attr in attrs.iter() {
-        match attr.name.local_name.as_str() {
-            "lang" => {
-                match textcode::lang::convert(&attr.value) {
-                    Some(v) => lang.push_str(v),
-                    None => {},
-                };
-            },
-            _ => {},
-        };
+        if attr.name.local_name.as_str() == "lang" {
+            if let Some(v) = textcode::lang::convert(&attr.value) {
+                lang.push_str(v);
+            };
+        }
     }
 
     if lang.is_empty() {
@@ -55,7 +51,7 @@ fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut 
 
     let value = map
         .entry(lang)
-        .or_insert_with(|| String::new());
+        .or_insert_with(String::new);
 
     while let Some(e) = reader.next() {
         match e? {
@@ -69,14 +65,13 @@ fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut 
     unreachable!();
 }
 
-fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlResult {
+fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
     let mut id = String::new();
 
     for attr in attrs.iter() {
-        match attr.name.local_name.as_str() {
-            "id" => id.push_str(&attr.value),
-            _ => {},
-        };
+        if attr.name.local_name.as_str() == "id" {
+            id.push_str(&attr.value);
+        }
     }
 
     if id.is_empty() {
@@ -85,7 +80,7 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: 
 
     let channel = epg.channels
         .entry(id)
-        .or_insert(EpgChannel::default());
+        .or_insert_with(EpgChannel::default);
 
     while let Some(e) = reader.next() {
         match e? {
@@ -101,7 +96,7 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: 
     unreachable!();
 }
 
-fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &Vec<OwnedAttribute>) -> XmlResult {
+fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
     let mut channel = String::new();
     let mut event_id: u16 = 0;
     let mut start: i64 = 0;
