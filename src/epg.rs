@@ -7,8 +7,8 @@ use chrono::prelude::*;
 use xml::reader::ParserConfig;
 use xml::writer::EmitterConfig;
 
-use reader::parse_xml_tv;
-use writer::assemble_xml_tv;
+use parse_xml::parse_xml_tv;
+use assemble_xml::assemble_xml_tv;
 
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
@@ -127,19 +127,24 @@ impl EpgChannel {
     pub fn sort(&mut self) {
         self.events.sort_by(|a, b| a.start.cmp(&b.start));
 
-        let mut events = self.events.iter_mut();
-        if let Some(event) = events.next() {
-            let mut event_id: u16 = event.event_id;
-            while let Some(event) = events.next() {
-                event_id = event_id.wrapping_add(1);
-                event.event_id = event_id;
+        {
+            // Set event_id for each event
+            let mut events = self.events.iter_mut();
+            if let Some(event) = events.next() {
+                let mut event_id: u16 = event.event_id;
+                while let Some(event) = events.next() {
+                    event_id = event_id.wrapping_add(1);
+                    event.event_id = event_id;
+                }
             }
         }
 
-        if let Some(event) = self.events.last() {
-            self.last_event_start = event.start;
-        } else {
-            self.last_event_start = 0;
+        {
+            if let Some(event) = self.events.last() {
+                self.last_event_start = event.start;
+            } else {
+                self.last_event_start = 0;
+            }
         }
     }
 

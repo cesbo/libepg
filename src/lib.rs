@@ -5,5 +5,5 @@ extern crate xml;
 mod epg;
 pub use epg::*;
 
-mod reader;
-mod writer;
+mod parse_xml;
+mod assemble_xml;
