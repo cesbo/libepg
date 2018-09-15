@@ -27,7 +27,9 @@ fn assemble_xml_value<W: io::Write>(map: &HashMap<String, String>, w: &mut Event
 
 fn assemble_xml_channel<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResult {
     for (id, channel) in &epg.channels {
-        w.write(XmlEvent::start_element("channel").attr("id", id))?;
+        w.write(XmlEvent::start_element("channel")
+            .attr("id", id)
+            .attr("event_id", &channel.first_event_id.to_string()))?;
 
         assemble_xml_value(&channel.name, w, "display-name")?;
 
@@ -43,7 +45,6 @@ fn assemble_xml_programme<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> Xm
         for event in &channel.events {
             w.write(XmlEvent::start_element("programme")
                 .attr("channel", id)
-                .attr("id", &event.event_id.to_string())
                 .attr("start", &Local.timestamp(event.start, 0).format(FMT_DATETIME).to_string())
                 .attr("stop", &Local.timestamp(event.stop, 0).format(FMT_DATETIME).to_string()))?;
 
