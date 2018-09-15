@@ -14,11 +14,17 @@ pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
 #[derive(Default, Debug, Clone)]
 pub struct EpgEvent {
+    /// Unique event identifier
     pub event_id: u16,
+    /// Event start time
     pub start: i64,
+    /// Event stop tiem (equal to the next event start time)
     pub stop: i64,
+    /// Event title list
     pub title: HashMap<String, String>,
+    /// Event short description list
     pub subtitle: HashMap<String, String>,
+    /// Event description list
     pub desc: HashMap<String, String>,
 }
 
@@ -101,8 +107,12 @@ impl EpgEvent {
 
 #[derive(Default, Debug)]
 pub struct EpgChannel {
+    /// Channel names list
     pub name: HashMap<String, String>,
+    /// Channel events list
     pub events: Vec<EpgEvent>,
+    /// Start time for last event
+    pub last_event_start: i64,
 }
 
 impl EpgChannel {
@@ -124,6 +134,12 @@ impl EpgChannel {
                 event_id = event_id.wrapping_add(1);
                 event.event_id = event_id;
             }
+        }
+
+        if let Some(event) = self.events.last() {
+            self.last_event_start = event.start;
+        } else {
+            self.last_event_start = 0;
         }
     }
 
