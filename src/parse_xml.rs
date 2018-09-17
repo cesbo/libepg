@@ -81,10 +81,11 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: 
         return skip_xml_element(reader);
     }
 
-    let channel = epg.channels
-        .entry(id)
-        .or_insert_with(EpgChannel::default);
+    if epg.channels.contains_key(&id) {
+        return skip_xml_element(reader);
+    }
 
+    let mut channel = EpgChannel::default();
     channel.first_event_id = event_id;
 
     while let Some(e) = reader.next() {
@@ -93,7 +94,10 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: 
                 "display-name" => parse_xml_value(&mut channel.name, reader, &attributes)?,
                 _ => skip_xml_element(reader)?,
             },
-            XmlEvent::EndElement { .. } => return Ok(()),
+            XmlEvent::EndElement { .. } => {
+                epg.channels.insert(id, channel);
+                return Ok(());
+            },
             _ => {},
         };
     }
@@ -119,6 +123,10 @@ fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs
         Some(v) => v,
         None => return skip_xml_element(reader),
     };
+
+    if channel.last_event_start >= start {
+        return skip_xml_element(reader);
+    }
 
     let mut event = EpgEvent::default();
     event.start = start;

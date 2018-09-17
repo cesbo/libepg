@@ -27,9 +27,12 @@ fn assemble_xml_value<W: io::Write>(map: &HashMap<String, String>, w: &mut Event
 
 fn assemble_xml_channel<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResult {
     for (id, channel) in &epg.channels {
-        w.write(XmlEvent::start_element("channel")
-            .attr("id", id)
-            .attr("event_id", &channel.first_event_id.to_string()))?;
+        let mut event = XmlEvent::start_element("channel").attr("id", id);
+        if channel.first_event_id == 0 {
+            w.write(event)?;
+        } else {
+            w.write(event.attr("event_id", &channel.first_event_id.to_string()))?;
+        }
 
         assemble_xml_value(&channel.name, w, "display-name")?;
 

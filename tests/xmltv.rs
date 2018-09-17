@@ -53,3 +53,26 @@ fn test_assemble_xmltv() {
     // TODO:
     println!("{}", xml);
 }
+
+#[test]
+fn test_merge_xmltv() {
+    let content: &[u8] = include_bytes!("docs/e3-1.xml");
+    let mut epg = Epg::default();
+    epg.parse_xml(content).unwrap();
+
+    let content: &[u8] = include_bytes!("docs/e3-2.xml");
+    epg.parse_xml(content).unwrap();
+
+    let channel = epg.channels.get("id-1").unwrap();
+    assert_eq!(channel.name.get("eng").unwrap(), "Test Channel");
+    assert_eq!(channel.events.len(), 4);
+
+    let ev0 = channel.events.get(0).unwrap();
+    let ev1 = channel.events.get(1).unwrap();
+    let ev2 = channel.events.get(2).unwrap();
+    let ev3 = channel.events.get(3).unwrap();
+
+    assert_eq!(ev0.stop, ev1.start);
+    assert_eq!(ev1.stop, ev2.start);
+    assert_eq!(ev2.stop, ev3.start);
+}
