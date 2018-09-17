@@ -1,0 +1,7 @@
+<tv>
+<channel id="id-1"><display-name lang="en">Test Channel</display-name></channel>
+<programme start="20180820070000 +0300" stop="20180820073000 +0300" channel="id-1"><title lang="en">Title #2</title><desc lang="en">Desc #2</desc></programme>
+<programme start="20180820060000 +0300" stop="20180820070000 +0300" channel="id-1"><title lang="en">Title #1</title><desc lang="en">Desc #1</desc></programme>
+<programme start="20180820073000 +0300" stop="20180820080000 +0300" channel="id-1"><title lang="en">Title #3</title><desc lang="en">Desc #3</desc></programme>
+<programme start="20180820080000 +0300" stop="20180820083000 +0300" channel="id-1"><title lang="en">Title #4</title><desc lang="en">Desc #4</desc></programme>
+</tv>
