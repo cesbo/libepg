@@ -2,6 +2,7 @@ extern crate epg;
 extern crate mpegts;
 
 use mpegts::psi::*;
+use mpegts::textcode;
 use epg::*;
 
 use std::str;
@@ -61,13 +62,13 @@ fn test_parse_eit() {
     let mut eit = Eit::default();
     eit.parse(&psi);
 
-    let mut epg = EpgChannel::default();
-    epg.parse_eit(&eit);
+    let mut channel = EpgChannel::default();
+    channel.parse_eit(&eit);
 
-    assert_eq!(epg.name.len(), 0);
+    assert_eq!(channel.name.len(), 0);
 
-    assert_eq!(epg.events.len(), 1);
-    let event = epg.events.iter().next().unwrap();
+    assert_eq!(channel.events.len(), 1);
+    let event = channel.events.iter().next().unwrap();
     assert_eq!(event.start, 1534183800);
     assert_eq!(event.stop, 1534183800 + 1800);
     assert_eq!(event.title.len(), 1);
@@ -76,7 +77,7 @@ fn test_parse_eit() {
     assert_eq!(event.desc.len(), 1);
     assert_eq!(event.desc.get("pol").unwrap(), EIT_50_EVENT_DESC);
 
-    assert_eq!(epg.last_event_start, event.start);
+    assert_eq!(channel.last_event_start, event.start);
 }
 
 #[test]
