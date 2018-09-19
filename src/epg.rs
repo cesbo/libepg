@@ -36,18 +36,13 @@ impl EpgEvent {
         for desc in eit_item.descriptors.iter() {
             match desc {
                 Descriptor::Desc4D(v) => {
-                    if !v.name.is_empty() {
-                        event.title
-                            .entry(v.lang.to_string())
-                            .or_insert_with(String::new)
-                            .push_str(v.name.as_str());
-                    }
+                    event.title.insert(v.lang.to_string(), v.name.to_string());
 
                     if !v.text.is_empty() {
                         event.subtitle
                             .entry(v.lang.to_string())
                             .or_insert_with(String::new)
-                            .push_str(v.text.as_str());
+                            .push_str(&v.text.to_string());
                     }
                 },
                 Descriptor::Desc4E(v) => {
@@ -55,7 +50,7 @@ impl EpgEvent {
                         event.desc
                             .entry(v.lang.to_string())
                             .or_insert_with(String::new)
-                            .push_str(v.text.as_str());
+                            .push_str(&v.text.to_string());
                     }
                 },
                 _ => (),
@@ -71,31 +66,6 @@ impl EpgEvent {
         eit_item.start = self.start;
         eit_item.duration = (self.stop - self.start) as i32;
         eit_item.status = 1;
-
-        for (lang, title) in &self.title {
-            let subtitle = match self.subtitle.get(lang) {
-                Some(v) => v,
-                None => "",
-            };
-
-            eit_item.descriptors.push(Descriptor::Desc4D(Desc4D {
-                lang: lang.to_string(),
-                name: title.to_string(),
-                text: subtitle.to_string(),
-                codepage,
-            }));
-        }
-
-        for (lang, desc) in &self.desc {
-            eit_item.descriptors.push(Descriptor::Desc4E(Desc4E {
-                number: 0,
-                last_number: 0,
-                lang: lang.to_string(),
-                items: Vec::new(),
-                text: desc.to_string(),
-                codepage,
-            }));
-        }
 
         eit_item
     }

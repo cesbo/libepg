@@ -1,16 +1,12 @@
 extern crate epg;
 extern crate mpegts;
 
-use mpegts::ts::*;
 use mpegts::psi::*;
-use mpegts::textcode;
 use epg::*;
 
-use std::io::prelude::*;
-use std::fs::File;
 use std::str;
 
-pub static EIT_50: &[u8] = &[
+pub const EIT_50: &[u8] = &[
     0x47, 0x40, 0x12, 0x14, 0x00, 0x50, 0xf2, 0x21, 0x1c, 0xcf, 0xeb, 0x00, 0x00, 0x1c, 0xe8, 0x00,
     0x01, 0x00, 0x50, 0x7c, 0xcc, 0xe3, 0xe7, 0x18, 0x10, 0x00, 0x00, 0x30, 0x00, 0x12, 0x06, 0x4d,
     0x2c, 0x70, 0x6f, 0x6c, 0x27, 0x10, 0x00, 0x02, 0x4f, 0x73, 0x74, 0x61, 0x74, 0x6e, 0x69, 0x20,
@@ -48,6 +44,8 @@ pub static EIT_50: &[u8] = &[
     0x71, 0x75, 0x69, 0x6e, 0x3f, 0x4f, 0x64, 0x20, 0x6c, 0x61, 0x74, 0x3a, 0x20, 0x31, 0x32, 0x55,
     0x04, 0x50, 0x4c, 0x20, 0x09, 0xff, 0xc2, 0xe2, 0x2a, 0xff, 0xff, 0xff,
 ];
+pub const EIT_50_EVENT_TITLE: &str = "Ostatni prawdziwy mężczyzna 4: odc.5";
+pub const EIT_50_EVENT_DESC: &str = "serial komediowy (USA, 2014) odc.5, Szkolna fuzja?Występują: Tim Allen, Nancy Travis, Molly Ephraim?Mike i Chuck debatują na temat zalet lokalnego referendum o połączeniu ich ekskluzywnej szkoły średniej z sąsiedztwa z placówką ze śródmieścia. Z okazji Halloween, Ryan przebiera Boyda za bryłę węgla. Ma to być kolejnym przypomnieniem dla Vanessy, że jej praca jako geologa może szkodzić środowisku naturalnemu.?Reżyser: John Pasquin?Od lat: 12";
 
 #[test]
 fn test_parse_eit() {
@@ -65,6 +63,20 @@ fn test_parse_eit() {
 
     let mut epg = EpgChannel::default();
     epg.parse_eit(&eit);
+
+    assert_eq!(epg.name.len(), 0);
+
+    assert_eq!(epg.events.len(), 1);
+    let event = epg.events.iter().next().unwrap();
+    assert_eq!(event.start, 1534183800);
+    assert_eq!(event.stop, 1534183800 + 1800);
+    assert_eq!(event.title.len(), 1);
+    assert_eq!(event.title.get("pol").unwrap(), EIT_50_EVENT_TITLE);
+    assert_eq!(event.subtitle.len(), 0);
+    assert_eq!(event.desc.len(), 1);
+    assert_eq!(event.desc.get("pol").unwrap(), EIT_50_EVENT_DESC);
+
+    assert_eq!(epg.last_event_start, event.start);
 }
 
 #[test]
@@ -93,4 +105,6 @@ fn test_ts_to_xmltv() {
 
     let xml = str::from_utf8(&dst).unwrap();
     println!("{}", xml);
+
+    // TODO: more tests
 }
