@@ -2,6 +2,7 @@ use std::io;
 use std::collections::HashMap;
 
 use mpegts::psi::*;
+use mpegts::textcode::*;
 use chrono::prelude::*;
 
 use xml::reader::ParserConfig;
@@ -12,7 +13,7 @@ use assemble_xml::assemble_xml_tv;
 
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct EpgEvent {
     /// Event start time
     pub start: i64,
@@ -66,6 +67,37 @@ impl EpgEvent {
         eit_item.start = self.start;
         eit_item.duration = (self.stop - self.start) as i32;
         eit_item.status = 1;
+
+        for (lang, title) in &self.title {
+            let subtitle = match self.subtitle.get(lang) {
+                Some(v) => v,
+                None => "",
+            };
+
+            eit_item.descriptors.push(Descriptor::Desc4D(Desc4D {
+                lang: StringDVB::from_str(lang, 0),
+                name: StringDVB::from_str(title, codepage),
+                text: StringDVB::from_str(subtitle, codepage),
+            }));
+        }
+
+        for (lang, desc) in &self.desc {
+            let mut text_list = StringDVB::from_str(desc, codepage).split(0xFF - Desc4E::min_size());
+            let mut number: u8 = 0;
+            let mut last_number: u8 = text_list.len() as u8 - 1;
+
+            while text_list.len() > 0 {
+                let text = text_list.remove(0);
+                eit_item.descriptors.push(Descriptor::Desc4E(Desc4E {
+                    number,
+                    last_number,
+                    lang: StringDVB::from_str(lang, 0),
+                    items: Vec::new(),
+                    text,
+                }));
+                number += 1;
+            }
+        }
 
         eit_item
     }

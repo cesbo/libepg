@@ -1,7 +1,7 @@
 extern crate epg;
 extern crate mpegts;
 
-use mpegts::psi::*;
+use mpegts::psi::*;g
 use mpegts::textcode;
 use epg::*;
 
@@ -108,4 +108,43 @@ fn test_ts_to_xmltv() {
     println!("{}", xml);
 
     // TODO: more tests
+}
+
+#[test]
+fn test_assemble_eit() {
+    let mut psi = Psi::default();
+
+    let mut skip = 0;
+    while skip < EIT_50.len() {
+        psi.mux(&EIT_50[skip ..]);
+        skip += 188;
+    }
+    assert!(psi.check());
+
+    let mut eit = Eit::default();
+    eit.parse(&psi);
+
+    let mut channel = EpgChannel::default();
+    channel.parse_eit(&eit);
+
+    channel.first_event_id = 1;
+    let mut tmp_eit = channel.assemble_eit(textcode::ISO8859_2);
+    tmp_eit.version = 1;
+    tmp_eit.pnr = 6;
+    tmp_eit.tsid = 1;
+    tmp_eit.onid = 1;
+
+    let mut new_psi = Psi::default();
+    tmp_eit.assemble(&mut new_psi);
+
+    let mut new_eit = Eit::default();
+    new_eit.parse(&new_psi);
+
+    let mut new_channel = EpgChannel::default();
+    new_channel.parse_eit(&new_eit);
+
+    let event = channel.events.iter().next().unwrap();
+    let new_event = new_channel.events.iter().next().unwrap();
+
+    assert_eq!(event, new_event);
 }
