@@ -76,8 +76,6 @@ fn test_parse_eit() {
     assert_eq!(event.subtitle.len(), 0);
     assert_eq!(event.desc.len(), 1);
     assert_eq!(event.desc.get("pol").unwrap(), EIT_50_EVENT_DESC);
-
-    assert_eq!(channel.last_event_start, event.start);
 }
 
 #[test]

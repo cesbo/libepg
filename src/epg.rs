@@ -128,17 +128,22 @@ impl EpgChannel {
         for eit_item in &eit.items {
             self.events.push(EpgEvent::parse(eit_item));
         }
-
         self.sort();
     }
 
     pub fn sort(&mut self) {
+        if self.events.is_empty() {
+            return;
+        }
+
         self.events.sort_by(|a, b| a.start.cmp(&b.start));
 
-        if let Some(event) = self.events.last() {
-            self.last_event_start = event.start;
-        } else {
-            self.last_event_start = 0;
+        self.last_event_start = self.events.last().unwrap().start;
+
+        let mut event_id = self.events.first().unwrap().event_id;
+        for event in &mut self.events {
+            event.event_id = event_id;
+            event_id += 1;
         }
     }
 
