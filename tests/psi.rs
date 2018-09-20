@@ -1,8 +1,8 @@
 extern crate epg;
 extern crate mpegts;
 
-use mpegts::psi::*;g
-use mpegts::textcode;
+use mpegts::psi::*;
+use mpegts::textcode::*;
 use epg::*;
 
 use std::str;
@@ -128,7 +128,7 @@ fn test_assemble_eit() {
     channel.parse_eit(&eit);
 
     channel.first_event_id = 1;
-    let mut tmp_eit = channel.assemble_eit(textcode::ISO8859_2);
+    let mut tmp_eit = channel.assemble_eit(ISO8859_2);
     tmp_eit.version = 1;
     tmp_eit.pnr = 6;
     tmp_eit.tsid = 1;

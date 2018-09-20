@@ -1,5 +1,11 @@
 extern crate epg;
+extern crate mpegts;
+
 use epg::*;
+
+use mpegts::psi::*;
+use mpegts::textcode::*;
+
 use std::str;
 
 #[test]
@@ -75,4 +81,25 @@ fn test_merge_xmltv() {
     assert_eq!(ev0.stop, ev1.start);
     assert_eq!(ev1.stop, ev2.start);
     assert_eq!(ev2.stop, ev3.start);
+}
+
+#[test]
+fn test_convert_to_psi() {
+    let content: &[u8] = include_bytes!("docs/e4.xml");
+
+    // convert xmltv into epg
+    let mut epg = Epg::default();
+    epg.parse_xml(content).unwrap();
+
+    let channel = epg.channels.get("id-1").unwrap();
+    let mut eit = channel.assemble_eit(ISO8859_5);
+    eit.version = 1;
+    eit.pnr = 100;
+    eit.tsid = 1;
+    eit.onid = 1;
+
+    let mut psi = Psi::default();
+    eit.assemble(&mut psi);
+
+    // TODO: more tests
 }
