@@ -63,7 +63,7 @@ fn test_parse_eit() {
     eit.parse(&psi);
 
     let mut channel = EpgChannel::default();
-    channel.parse_eit(&eit);
+    channel.parse(&eit);
 
     assert_eq!(channel.name.len(), 0);
 
@@ -95,7 +95,7 @@ fn test_ts_to_xmltv() {
     eit.parse(&psi);
 
     let mut channel = EpgChannel::default();
-    channel.parse_eit(&eit);
+    channel.parse(&eit);
     channel.name.insert("pl".to_string(), "Test".to_string());
 
     let mut epg = Epg::default();
@@ -125,10 +125,9 @@ fn test_assemble_eit() {
     eit.parse(&psi);
 
     let mut channel = EpgChannel::default();
-    channel.parse_eit(&eit);
+    channel.parse(&eit);
 
-    channel.first_event_id = 1;
-    let mut tmp_eit = channel.assemble_eit(ISO8859_2);
+    let mut tmp_eit = channel.assemble(ISO8859_2);
     tmp_eit.version = 1;
     tmp_eit.pnr = 6;
     tmp_eit.tsid = 1;
@@ -141,7 +140,7 @@ fn test_assemble_eit() {
     new_eit.parse(&new_psi);
 
     let mut new_channel = EpgChannel::default();
-    new_channel.parse_eit(&new_eit);
+    new_channel.parse(&new_eit);
 
     let event = channel.events.iter().next().unwrap();
     let new_event = new_channel.events.iter().next().unwrap();

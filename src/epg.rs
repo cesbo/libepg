@@ -15,6 +15,8 @@ pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct EpgEvent {
+    /// Unique event identifier
+    pub event_id: u16,
     /// Event start time
     pub start: i64,
     /// Event stop tiem (equal to the next event start time)
@@ -28,9 +30,10 @@ pub struct EpgEvent {
 }
 
 impl EpgEvent {
-    pub fn parse_eit(eit_item: &EitItem) -> EpgEvent {
+    pub fn parse(eit_item: &EitItem) -> EpgEvent {
         let mut event = EpgEvent::default();
 
+        event.event_id = eit_item.event_id;
         event.start = eit_item.start;
         event.stop = eit_item.start + i64::from(eit_item.duration);
 
@@ -61,12 +64,19 @@ impl EpgEvent {
         event
     }
 
-    pub fn assemble_eit(&self, codepage: usize) -> EitItem {
+    pub fn assemble(&self, codepage: usize) -> EitItem {
         let mut eit_item = EitItem::default();
 
+        eit_item.event_id = self.event_id;
         eit_item.start = self.start;
         eit_item.duration = (self.stop - self.start) as i32;
-        eit_item.status = 1;
+
+        let current_time = Utc::now().timestamp();
+        if current_time >= self.start && current_time < self.stop {
+            eit_item.status = 4;
+        } else {
+            eit_item.status = 1;
+        }
 
         for (lang, title) in &self.title {
             let subtitle = match self.subtitle.get(lang) {
@@ -86,7 +96,7 @@ impl EpgEvent {
             let mut number: u8 = 0;
             let mut last_number: u8 = text_list.len() as u8 - 1;
 
-            while text_list.len() > 0 {
+            while ! text_list.is_empty() {
                 let text = text_list.remove(0);
                 eit_item.descriptors.push(Descriptor::Desc4E(Desc4E {
                     number,
@@ -109,16 +119,14 @@ pub struct EpgChannel {
     pub name: HashMap<String, String>,
     /// Channel events list
     pub events: Vec<EpgEvent>,
-    /// First event identifier
-    pub first_event_id: u16,
     /// Start time for last event
     pub last_event_start: i64,
 }
 
 impl EpgChannel {
-    pub fn parse_eit(&mut self, eit: &Eit) {
+    pub fn parse(&mut self, eit: &Eit) {
         for eit_item in &eit.items {
-            self.events.push(EpgEvent::parse_eit(eit_item));
+            self.events.push(EpgEvent::parse(eit_item));
         }
 
         self.sort();
@@ -134,23 +142,12 @@ impl EpgChannel {
         }
     }
 
-    pub fn assemble_eit(&self, codepage: usize) -> Eit {
+    pub fn assemble(&self, codepage: usize) -> Eit {
         let mut eit = Eit::default();
         eit.table_id = 0x50;
-
-        let current_time = Utc::now().timestamp();
-        let mut event_id = self.first_event_id;
-
         for event in &self.events {
-            let mut eit_item = event.assemble_eit(codepage);
-            eit_item.event_id = event_id;
-            event_id += 1;
-            if current_time >= event.start && current_time < event.stop {
-                eit_item.status = 4;
-            }
-            eit.items.push(eit_item);
+            eit.items.push(event.assemble(codepage));
         }
-
         eit
     }
 }

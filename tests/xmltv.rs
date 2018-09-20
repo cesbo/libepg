@@ -92,7 +92,7 @@ fn test_convert_to_psi() {
     epg.parse_xml(content).unwrap();
 
     let channel = epg.channels.get("id-1").unwrap();
-    let mut eit = channel.assemble_eit(ISO8859_5);
+    let mut eit = channel.assemble(ISO8859_5);
     eit.version = 1;
     eit.pnr = 100;
     eit.tsid = 1;
