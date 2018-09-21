@@ -100,7 +100,7 @@ fn test_ts_to_xmltv() {
     epg.channels.insert("id-1".to_string(), channel);
 
     let mut dst: Vec<u8> = Vec::new();
-    epg.assemble_xml(&mut dst).unwrap();
+    epg.write(&mut dst).unwrap();
 
     let xml = str::from_utf8(&dst).unwrap();
     println!("{}", xml);
@@ -124,8 +124,12 @@ fn test_assemble_eit() {
 
     let mut channel = EpgChannel::default();
     channel.parse(&eit);
+    let event = channel.events.iter_mut().next().unwrap();
+    event.codepage = ISO8859_2;
 
-    let mut tmp_eit = channel.assemble(ISO8859_2);
+    let mut tmp_eit = Eit::default();
+    tmp_eit.items.push(EitItem::from(&*event));
+    tmp_eit.table_id = 0x50;
     tmp_eit.version = 1;
     tmp_eit.pnr = 6;
     tmp_eit.tsid = 1;
@@ -139,9 +143,8 @@ fn test_assemble_eit() {
 
     let mut new_channel = EpgChannel::default();
     new_channel.parse(&new_eit);
-
-    let event = channel.events.iter().next().unwrap();
-    let new_event = new_channel.events.iter().next().unwrap();
+    let new_event = new_channel.events.iter_mut().next().unwrap();
+    new_event.codepage = ISO8859_2;
 
     assert_eq!(event, new_event);
 }

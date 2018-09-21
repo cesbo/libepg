@@ -14,7 +14,7 @@ fn test_parse_programme() {
 
     // convert xmltv into epg
     let mut epg = Epg::default();
-    epg.parse_xml(content).unwrap();
+    epg.read(content).unwrap();
     let p = epg.channels.get("id-1").unwrap().events.get(0).unwrap();
 
     // check event
@@ -30,7 +30,7 @@ fn test_parse_xmltv() {
 
     // convert xmltv into epg
     let mut epg = Epg::default();
-    epg.parse_xml(content).unwrap();
+    epg.read(content).unwrap();
 
     // get channel events
     let mut events_iter = epg.channels.get("id-1").unwrap().events.iter();
@@ -48,11 +48,11 @@ fn test_assemble_xmltv() {
 
     // convert xmltv into epg
     let mut epg = Epg::default();
-    epg.parse_xml(content).unwrap();
+    epg.read(content).unwrap();
 
     // convert epg into xmltv
     let mut target: Vec<u8> = Vec::new();
-    epg.assemble_xml(&mut target).unwrap();
+    epg.write(&mut target).unwrap();
 
     let xml = str::from_utf8(&target).unwrap();
 
@@ -64,10 +64,10 @@ fn test_assemble_xmltv() {
 fn test_merge_xmltv() {
     let content: &[u8] = include_bytes!("docs/e3-1.xml");
     let mut epg = Epg::default();
-    epg.parse_xml(content).unwrap();
+    epg.read(content).unwrap();
 
     let content: &[u8] = include_bytes!("docs/e3-2.xml");
-    epg.parse_xml(content).unwrap();
+    epg.read(content).unwrap();
 
     let channel = epg.channels.get("id-1").unwrap();
     assert_eq!(channel.name.get("eng").unwrap(), "Test Channel");
@@ -89,14 +89,19 @@ fn test_convert_to_psi() {
 
     // convert xmltv into epg
     let mut epg = Epg::default();
-    epg.parse_xml(content).unwrap();
+    epg.read(content).unwrap();
 
-    let channel = epg.channels.get("id-1").unwrap();
-    let mut eit = channel.assemble(ISO8859_5);
+    let channel = epg.channels.get_mut("id-1").unwrap();
+    let event = channel.events.iter_mut().next().unwrap();
+    event.codepage = ISO8859_5;
+
+    let mut eit = Eit::default();
+    eit.table_id = 0x50;
     eit.version = 1;
     eit.pnr = 100;
     eit.tsid = 1;
     eit.onid = 1;
+    eit.items.push(EitItem::from(&*event));
 
     let mut psi = Psi::default();
     eit.assemble(&mut psi);

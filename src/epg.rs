@@ -8,10 +8,12 @@ use chrono::prelude::*;
 use xml::reader::ParserConfig;
 use xml::writer::EmitterConfig;
 
-use parse_xml::parse_xml_tv;
-use assemble_xml::assemble_xml_tv;
+use read_xml::read_xml_tv;
+use write_xml::write_xml_tv;
 
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
+
+// TODO: HashMap for codepage: language = codepage
 
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct EpgEvent {
@@ -27,10 +29,12 @@ pub struct EpgEvent {
     pub subtitle: HashMap<String, String>,
     /// Event description list
     pub desc: HashMap<String, String>,
+    /// Codepage
+    pub codepage: usize,
 }
 
-impl EpgEvent {
-    pub fn parse(eit_item: &EitItem) -> EpgEvent {
+impl<'a> From<&'a EitItem> for EpgEvent {
+    fn from(eit_item: &EitItem) -> Self {
         let mut event = EpgEvent::default();
 
         event.event_id = eit_item.event_id;
@@ -63,36 +67,38 @@ impl EpgEvent {
 
         event
     }
+}
 
-    pub fn assemble(&self, codepage: usize) -> EitItem {
+impl<'a> From<&'a EpgEvent> for EitItem {
+    fn from(event: &EpgEvent) -> Self {
         let mut eit_item = EitItem::default();
 
-        eit_item.event_id = self.event_id;
-        eit_item.start = self.start;
-        eit_item.duration = (self.stop - self.start) as i32;
+        eit_item.event_id = event.event_id;
+        eit_item.start = event.start;
+        eit_item.duration = (event.stop - event.start) as i32;
 
         let current_time = Utc::now().timestamp();
-        if current_time >= self.start && current_time < self.stop {
+        if current_time >= event.start && current_time < event.stop {
             eit_item.status = 4;
         } else {
             eit_item.status = 1;
         }
 
-        for (lang, title) in &self.title {
-            let subtitle = match self.subtitle.get(lang) {
+        for (lang, title) in &event.title {
+            let subtitle = match event.subtitle.get(lang) {
                 Some(v) => v,
                 None => "",
             };
 
             eit_item.descriptors.push(Descriptor::Desc4D(Desc4D {
                 lang: StringDVB::from_str(lang, 0),
-                name: StringDVB::from_str(title, codepage),
-                text: StringDVB::from_str(subtitle, codepage),
+                name: StringDVB::from_str(title, event.codepage),
+                text: StringDVB::from_str(subtitle, event.codepage),
             }));
         }
 
-        for (lang, desc) in &self.desc {
-            let mut text_list = StringDVB::from_str(desc, codepage).split(0xFF - Desc4E::min_size());
+        for (lang, desc) in &event.desc {
+            let mut text_list = StringDVB::from_str(desc, event.codepage).split(0xFF - Desc4E::min_size());
             let mut number: u8 = 0;
             let mut last_number: u8 = text_list.len() as u8 - 1;
 
@@ -126,7 +132,7 @@ pub struct EpgChannel {
 impl EpgChannel {
     pub fn parse(&mut self, eit: &Eit) {
         for eit_item in &eit.items {
-            self.events.push(EpgEvent::parse(eit_item));
+            self.events.push(EpgEvent::from(eit_item));
         }
         self.sort();
     }
@@ -146,15 +152,6 @@ impl EpgChannel {
             event_id += 1;
         }
     }
-
-    pub fn assemble(&self, codepage: usize) -> Eit {
-        let mut eit = Eit::default();
-        eit.table_id = 0x50;
-        for event in &self.events {
-            eit.items.push(event.assemble(codepage));
-        }
-        eit
-    }
 }
 
 #[derive(Default, Debug)]
@@ -163,14 +160,14 @@ pub struct Epg {
 }
 
 impl Epg {
-    pub fn parse_xml<R: io::Read>(&mut self, src: R) -> Result<(), String> {
+    pub fn read<R: io::Read>(&mut self, src: R) -> Result<(), String> {
         let mut reader = ParserConfig::new()
             .trim_whitespace(true)
             .ignore_comments(true)
             .create_reader(src)
             .into_iter();
 
-        if let Err(e) = parse_xml_tv(self, &mut reader) {
+        if let Err(e) = read_xml_tv(self, &mut reader) {
             Err(format!("{}", e))
         } else {
             for channel in self.channels.values_mut() {
@@ -180,12 +177,12 @@ impl Epg {
         }
     }
 
-    pub fn assemble_xml<W: io::Write>(&self, dst: W) -> Result<(), String> {
+    pub fn write<W: io::Write>(&self, dst: W) -> Result<(), String> {
         let mut writer = EmitterConfig::new()
             .write_document_declaration(false)
             .create_writer(dst);
 
-        if let Err(e) = assemble_xml_tv(self, &mut writer) {
+        if let Err(e) = write_xml_tv(self, &mut writer) {
             Err(format!("{}", e))
         } else {
             Ok(())

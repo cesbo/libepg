@@ -65,7 +65,7 @@ fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut 
     unreachable!();
 }
 
-fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
+fn read_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
     let mut id = String::new();
 
     for attr in attrs.iter() {
@@ -100,7 +100,7 @@ fn parse_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: 
     unreachable!();
 }
 
-fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
+fn read_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
     let mut event_id: u16 = 0;
     let mut channel = String::new();
     let mut start: i64 = 0;
@@ -149,14 +149,14 @@ fn parse_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs
     unreachable!();
 }
 
-pub fn parse_xml_tv<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>) -> XmlResult {
+pub fn read_xml_tv<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>) -> XmlResult {
     while let Some(e) = reader.next() {
         match e? {
             XmlEvent::StartElement { name, attributes, .. } => {
                 match name.local_name.as_str() {
                     "tv" => {},
-                    "channel" => parse_xml_channel(epg, reader, &attributes)?,
-                    "programme" => parse_xml_programme(epg, reader, &attributes)?,
+                    "channel" => read_xml_channel(epg, reader, &attributes)?,
+                    "programme" => read_xml_programme(epg, reader, &attributes)?,
                     _ => skip_xml_element(reader)?,
                 };
             },
