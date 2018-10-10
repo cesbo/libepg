@@ -11,6 +11,9 @@ use xml::writer::EmitterConfig;
 use read_xml::read_xml_tv;
 use write_xml::write_xml_tv;
 
+use std::fs::File;
+use std::io::BufReader;
+
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
 // TODO: HashMap for codepage: language = codepage
@@ -160,6 +163,23 @@ pub struct Epg {
 }
 
 impl Epg {
+    pub fn load(&mut self, src: &str) -> Result<(), String> {
+        let mut src = src.splitn(2, "://");
+        let format = src.next().unwrap_or("");
+        let buffer = match format {
+            "file" => {
+                let path = src.next().unwrap_or("");
+                match File::open(path) {
+                    Ok(v) => BufReader::new(v),
+                    Err(e) => return Err(format!("{}", e)),
+                }
+            },
+            _ => return Err(format!("unknown source type: {}", format)),
+        };
+
+        self.read(buffer)
+    }
+
     pub fn read<R: io::Read>(&mut self, src: R) -> Result<(), String> {
         let mut reader = ParserConfig::new()
             .trim_whitespace(true)

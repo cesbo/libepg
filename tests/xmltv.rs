@@ -10,11 +10,8 @@ use std::str;
 
 #[test]
 fn test_parse_programme() {
-    let content: &[u8] = include_bytes!("docs/e1.xml");
-
-    // convert xmltv into epg
     let mut epg = Epg::default();
-    epg.read(content).unwrap();
+    epg.load("file://tests/docs/e1.xml").unwrap();
     let p = epg.channels.get("id-1").unwrap().events.get(0).unwrap();
 
     // check event
@@ -26,11 +23,8 @@ fn test_parse_programme() {
 
 #[test]
 fn test_parse_xmltv() {
-    let content: &[u8] = include_bytes!("docs/e2.xml");
-
-    // convert xmltv into epg
     let mut epg = Epg::default();
-    epg.read(content).unwrap();
+    epg.load("file://tests/docs/e2.xml").unwrap();
 
     // get channel events
     let mut events_iter = epg.channels.get("id-1").unwrap().events.iter();
@@ -44,11 +38,8 @@ fn test_parse_xmltv() {
 
 #[test]
 fn test_assemble_xmltv() {
-    let content: &[u8] = include_bytes!("docs/e2.xml");
-
-    // convert xmltv into epg
     let mut epg = Epg::default();
-    epg.read(content).unwrap();
+    epg.load("file://tests/docs/e2.xml").unwrap();
 
     // convert epg into xmltv
     let mut target: Vec<u8> = Vec::new();
@@ -62,12 +53,10 @@ fn test_assemble_xmltv() {
 
 #[test]
 fn test_merge_xmltv() {
-    let content: &[u8] = include_bytes!("docs/e3-1.xml");
     let mut epg = Epg::default();
-    epg.read(content).unwrap();
+    epg.load("file://tests/docs/e3-1.xml").unwrap();
 
-    let content: &[u8] = include_bytes!("docs/e3-2.xml");
-    epg.read(content).unwrap();
+    epg.load("file://tests/docs/e3-2.xml").unwrap();
 
     let channel = epg.channels.get("id-1").unwrap();
     assert_eq!(channel.name.get("eng").unwrap(), "Test Channel");
@@ -85,11 +74,8 @@ fn test_merge_xmltv() {
 
 #[test]
 fn test_convert_to_psi() {
-    let content: &[u8] = include_bytes!("docs/e4.xml");
-
-    // convert xmltv into epg
     let mut epg = Epg::default();
-    epg.read(content).unwrap();
+    epg.load("file://tests/docs/e4.xml").unwrap();
 
     let channel = epg.channels.get_mut("id-1").unwrap();
     let event = channel.events.iter_mut().next().unwrap();
