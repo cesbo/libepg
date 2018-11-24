@@ -164,18 +164,25 @@ pub struct Epg {
 
 impl Epg {
     pub fn load(&mut self, src: &str) -> Result<(), String> {
-        let mut src = src.splitn(2, "://");
-        let format = src.next().unwrap_or("");
-        let buffer = match format {
-            "file" => {
-                let path = src.next().unwrap_or("");
-                match File::open(path) {
-                    Ok(v) => BufReader::new(v),
-                    Err(e) => return Err(format!("{}", e)),
+        let buffer = {
+            let src = src.splitn(2, "://").collect::<Vec<&str>>();
+            if src.len() == 1 {
+                match File::open(src[0]) {
+                    Ok(v) => Ok(BufReader::new(v)),
+                    Err(e) => Err(format!("{}", e.to_string())),
                 }
-            },
-            _ => return Err(format!("unknown source type: {}", format)),
-        };
+            } else {
+                match src[0] {
+                    "file" => {
+                        match File::open(src[1]) {
+                            Ok(v) => Ok(BufReader::new(v)),
+                            Err(e) => Err(format!("{}", e.to_string())),
+                        }
+                    },
+                    _ => Err(format!("unknown source type: {}", src[0]))
+                }
+            }
+        }?;
 
         self.read(buffer)
     }
