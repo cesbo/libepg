@@ -1,7 +1,7 @@
 use std::io;
 use std::collections::HashMap;
 
-use chrono::prelude::*;
+use chrono::{DateTime, TimeZone, Utc};
 
 use xml::attribute::OwnedAttribute;
 use xml::reader::{Result, Events, XmlEvent};
@@ -11,11 +11,22 @@ use mpegts::textcode;
 
 type XmlResult = Result<()>;
 
-#[inline]
 fn parse_date(value: &str) -> i64 {
-    match DateTime::parse_from_str(value, FMT_DATETIME) {
-        Ok(v) => v.timestamp(),
-        Err(_) => 0,
+    if value.len() > 14 {
+        match DateTime::parse_from_str(value, FMT_DATETIME) {
+            Ok(v) => v.timestamp(),
+            _ => 0,
+        }
+    } else if (value.len() == 14) || (value.len() == 12) {
+        /* 14: %Y%m%d%H%M%S */
+        /* 12: %Y%m%d%H%M */
+        let x = value.len() - 2;
+        match Utc.datetime_from_str(value, &FMT_DATETIME[.. x]) {
+            Ok(v) => v.timestamp(),
+            _ => 0,
+        }
+    } else {
+        0
     }
 }
 

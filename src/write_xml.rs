@@ -1,7 +1,7 @@
 use std::io;
 use std::collections::HashMap;
 
-use chrono::prelude::*;
+use chrono::{TimeZone, Utc};
 
 use xml::common::XmlVersion;
 use xml::writer::{Result, EventWriter, XmlEvent};
@@ -44,8 +44,8 @@ fn write_xml_programme<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlRe
             w.write(XmlEvent::start_element("programme")
                 .attr("event_id", &event.event_id.to_string())
                 .attr("channel", id)
-                .attr("start", &Local.timestamp(event.start, 0).format(FMT_DATETIME).to_string())
-                .attr("stop", &Local.timestamp(event.stop, 0).format(FMT_DATETIME).to_string()))?;
+                .attr("start", &Utc.timestamp(event.start, 0).format(FMT_DATETIME).to_string())
+                .attr("stop", &Utc.timestamp(event.stop, 0).format(FMT_DATETIME).to_string()))?;
 
             write_xml_value(&event.title, w, "title")?;
             write_xml_value(&event.subtitle, w, "sub-title")?;
