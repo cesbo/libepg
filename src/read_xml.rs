@@ -57,7 +57,7 @@ fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut 
     }
 
     if lang.is_empty() {
-        return skip_xml_element(reader);
+        lang.push_str("und"); /* ISO 639-2 Undetermined */
     }
 
     let value = map
