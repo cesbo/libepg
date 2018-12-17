@@ -33,7 +33,7 @@ pub struct EpgEvent {
     /// Event description list
     pub desc: HashMap<String, String>,
     /// Codepage
-    pub codepage: usize,
+    pub codepage: u8,
 }
 
 impl<'a> From<&'a EitItem> for EpgEvent {
