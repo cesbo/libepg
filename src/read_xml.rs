@@ -1,15 +1,15 @@
 use std::io;
 use std::collections::HashMap;
 
+use crate::error::Result;
+
 use chrono::{DateTime, TimeZone, Utc};
 
 use xml::attribute::OwnedAttribute;
-use xml::reader::{Result, Events, XmlEvent};
+use xml::reader::{Events, XmlEvent};
 
-use epg::{Epg, EpgChannel, EpgEvent, FMT_DATETIME};
+use crate::epg::{Epg, EpgChannel, EpgEvent, FMT_DATETIME};
 use mpegts::textcode;
-
-type XmlResult = Result<()>;
 
 fn parse_date(value: &str) -> i64 {
     if value.len() > 14 {
@@ -30,7 +30,7 @@ fn parse_date(value: &str) -> i64 {
     }
 }
 
-fn skip_xml_element<R: io::Read>(reader: &mut Events<R>) -> XmlResult {
+fn skip_xml_element<R: io::Read>(reader: &mut Events<R>) -> Result<()> {
     let mut deep = 0;
 
     for e in reader {
@@ -45,7 +45,7 @@ fn skip_xml_element<R: io::Read>(reader: &mut Events<R>) -> XmlResult {
     unreachable!();
 }
 
-fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
+fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> Result<()> {
     let mut lang = String::new();
 
     for attr in attrs.iter() {
@@ -76,7 +76,7 @@ fn parse_xml_value<R: io::Read>(map: &mut HashMap<String, String>, reader: &mut 
     unreachable!();
 }
 
-fn read_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
+fn read_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> Result<()> {
     let mut id = String::new();
 
     for attr in attrs.iter() {
@@ -111,7 +111,7 @@ fn read_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &
     unreachable!();
 }
 
-fn read_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> XmlResult {
+fn read_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> Result<()> {
     let mut event_id: u16 = 0;
     let mut channel = String::new();
     let mut start: i64 = 0;
@@ -160,7 +160,7 @@ fn read_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs:
     unreachable!();
 }
 
-pub fn read_xml_tv<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>) -> XmlResult {
+pub fn read_xml_tv<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>) -> Result<()> {
     while let Some(e) = reader.next() {
         match e? {
             XmlEvent::StartElement { name, attributes, .. } => {

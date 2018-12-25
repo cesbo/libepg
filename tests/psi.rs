@@ -2,7 +2,6 @@ extern crate epg;
 extern crate mpegts;
 
 use mpegts::psi::*;
-use mpegts::textcode::*;
 use epg::*;
 
 use std::str;
@@ -49,36 +48,6 @@ pub const EIT_50_EVENT_TITLE: &str = "Ostatni prawdziwy mężczyzna 4: odc.5";
 pub const EIT_50_EVENT_DESC: &str = "serial komediowy (USA, 2014) odc.5, Szkolna fuzja?Występują: Tim Allen, Nancy Travis, Molly Ephraim?Mike i Chuck debatują na temat zalet lokalnego referendum o połączeniu ich ekskluzywnej szkoły średniej z sąsiedztwa z placówką ze śródmieścia. Z okazji Halloween, Ryan przebiera Boyda za bryłę węgla. Ma to być kolejnym przypomnieniem dla Vanessy, że jej praca jako geologa może szkodzić środowisku naturalnemu.?Reżyser: John Pasquin?Od lat: 12";
 
 #[test]
-fn test_parse_eit() {
-    let mut psi = Psi::default();
-
-    let mut skip = 0;
-    while skip < EIT_50.len() {
-        psi.mux(&EIT_50[skip ..]);
-        skip += 188;
-    }
-    assert!(psi.check());
-
-    let mut eit = Eit::default();
-    eit.parse(&psi);
-
-    let mut channel = EpgChannel::default();
-    channel.parse(&eit);
-
-    assert_eq!(channel.name.len(), 0);
-
-    assert_eq!(channel.events.len(), 1);
-    let event = channel.events.iter().next().unwrap();
-    assert_eq!(event.start, 1534183800);
-    assert_eq!(event.stop, 1534183800 + 1800);
-    assert_eq!(event.title.len(), 1);
-    assert_eq!(event.title.get("pol").unwrap(), EIT_50_EVENT_TITLE);
-    assert_eq!(event.subtitle.len(), 0);
-    assert_eq!(event.desc.len(), 1);
-    assert_eq!(event.desc.get("pol").unwrap(), EIT_50_EVENT_DESC);
-}
-
-#[test]
 fn test_ts_to_xmltv() {
     let mut psi = Psi::default();
 
@@ -106,45 +75,4 @@ fn test_ts_to_xmltv() {
     println!("{}", xml);
 
     // TODO: more tests
-}
-
-#[test]
-fn test_assemble_eit() {
-    let mut psi = Psi::default();
-
-    let mut skip = 0;
-    while skip < EIT_50.len() {
-        psi.mux(&EIT_50[skip ..]);
-        skip += 188;
-    }
-    assert!(psi.check());
-
-    let mut eit = Eit::default();
-    eit.parse(&psi);
-
-    let mut channel = EpgChannel::default();
-    channel.parse(&eit);
-    let event = channel.events.iter_mut().next().unwrap();
-    event.codepage = ISO8859_2;
-
-    let mut tmp_eit = Eit::default();
-    tmp_eit.items.push(EitItem::from(&*event));
-    tmp_eit.table_id = 0x50;
-    tmp_eit.version = 1;
-    tmp_eit.pnr = 6;
-    tmp_eit.tsid = 1;
-    tmp_eit.onid = 1;
-
-    let mut new_psi = Psi::default();
-    tmp_eit.assemble(&mut new_psi);
-
-    let mut new_eit = Eit::default();
-    new_eit.parse(&new_psi);
-
-    let mut new_channel = EpgChannel::default();
-    new_channel.parse(&new_eit);
-    let new_event = new_channel.events.iter_mut().next().unwrap();
-    new_event.codepage = ISO8859_2;
-
-    assert_eq!(event, new_event);
 }

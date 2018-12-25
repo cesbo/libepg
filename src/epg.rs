@@ -1,5 +1,8 @@
-use std::io;
+use std::fs::File;
+use std::io::{BufReader, Read, Write};
 use std::collections::HashMap;
+
+use crate::error::{Error, Result};
 
 use mpegts::psi::*;
 use mpegts::textcode::*;
@@ -8,11 +11,8 @@ use chrono::prelude::*;
 use xml::reader::ParserConfig;
 use xml::writer::EmitterConfig;
 
-use read_xml::read_xml_tv;
-use write_xml::write_xml_tv;
-
-use std::fs::File;
-use std::io::BufReader;
+use crate::read_xml::read_xml_tv;
+use crate::write_xml::write_xml_tv;
 
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
@@ -103,7 +103,7 @@ impl<'a> From<&'a EpgEvent> for EitItem {
         for (lang, desc) in &event.desc {
             let mut text_list = StringDVB::from_str(desc, event.codepage).split(0xFF - Desc4E::min_size());
             let mut number: u8 = 0;
-            let mut last_number: u8 = text_list.len() as u8 - 1;
+            let last_number: u8 = text_list.len() as u8 - 1;
 
             while ! text_list.is_empty() {
                 let text = text_list.remove(0);
@@ -163,56 +163,48 @@ pub struct Epg {
 }
 
 impl Epg {
-    pub fn load(&mut self, src: &str) -> Result<(), String> {
-        let buffer = {
-            let src = src.splitn(2, "://").collect::<Vec<&str>>();
-            if src.len() == 1 {
-                match File::open(src[0]) {
-                    Ok(v) => Ok(BufReader::new(v)),
-                    Err(e) => Err(format!("{}", e.to_string())),
-                }
-            } else {
-                match src[0] {
-                    "file" => {
-                        match File::open(src[1]) {
-                            Ok(v) => Ok(BufReader::new(v)),
-                            Err(e) => Err(format!("{}", e.to_string())),
-                        }
-                    },
-                    _ => Err(format!("unknown source type: {}", src[0]))
-                }
-            }
-        }?;
+    pub fn load(&mut self, src: &str) -> Result<()> {
+        let buffer;
+
+        let src = src.splitn(2, "://").collect::<Vec<&str>>();
+        if src.len() == 1 {
+            let fh = File::open(src[0])?;
+            buffer = BufReader::new(fh);
+        } else {
+            match src[0] {
+                "file" => {
+                    let fh = File::open(src[1])?;
+                    buffer = BufReader::new(fh);
+                },
+                _ => return Err(Error::from(format!("unknown source type: {}", src[0]))),
+            };
+        }
 
         self.read(buffer)
     }
 
-    pub fn read<R: io::Read>(&mut self, src: R) -> Result<(), String> {
+    pub fn read<R: Read>(&mut self, src: R) -> Result<()> {
         let mut reader = ParserConfig::new()
             .trim_whitespace(true)
             .ignore_comments(true)
             .create_reader(src)
             .into_iter();
 
-        if let Err(e) = read_xml_tv(self, &mut reader) {
-            Err(format!("{}", e))
-        } else {
-            for channel in self.channels.values_mut() {
-                channel.sort();
-            }
-            Ok(())
+        read_xml_tv(self, &mut reader)?;
+
+        for channel in self.channels.values_mut() {
+            channel.sort();
         }
+        Ok(())
     }
 
-    pub fn write<W: io::Write>(&self, dst: W) -> Result<(), String> {
+    pub fn write<W: Write>(&self, dst: W) -> Result<()> {
         let mut writer = EmitterConfig::new()
             .write_document_declaration(false)
             .create_writer(dst);
 
-        if let Err(e) = write_xml_tv(self, &mut writer) {
-            Err(format!("{}", e))
-        } else {
-            Ok(())
-        }
+        write_xml_tv(self, &mut writer)?;
+
+        Ok(())
     }
 }

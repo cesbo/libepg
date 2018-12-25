@@ -89,8 +89,5 @@ fn test_convert_to_psi() {
     eit.onid = 1;
     eit.items.push(EitItem::from(&*event));
 
-    let mut psi = Psi::default();
-    eit.assemble(&mut psi);
-
     // TODO: more tests
 }

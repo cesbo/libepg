@@ -1,17 +1,17 @@
 use std::io;
 use std::collections::HashMap;
 
+use crate::error::Result;
+
 use chrono::{TimeZone, Utc};
 
 use xml::common::XmlVersion;
-use xml::writer::{Result, EventWriter, XmlEvent};
+use xml::writer::{EventWriter, XmlEvent};
 
-use epg::{Epg, FMT_DATETIME};
+use crate::epg::{Epg, FMT_DATETIME};
 use mpegts::textcode;
 
-type XmlResult = Result<()>;
-
-fn write_xml_value<W: io::Write>(map: &HashMap<String, String>, w: &mut EventWriter<W>, name: &str) -> XmlResult {
+fn write_xml_value<W: io::Write>(map: &HashMap<String, String>, w: &mut EventWriter<W>, name: &str) -> Result<()> {
     for (lang, text) in map.iter() {
         let lang = match textcode::lang::convert(lang) {
             Some(v) => v,
@@ -25,7 +25,7 @@ fn write_xml_value<W: io::Write>(map: &HashMap<String, String>, w: &mut EventWri
     Ok(())
 }
 
-fn write_xml_channel<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResult {
+fn write_xml_channel<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> Result<()> {
     for (id, channel) in &epg.channels {
         w.write(XmlEvent::start_element("channel").attr("id", id))?;
 
@@ -38,7 +38,7 @@ fn write_xml_channel<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResu
     Ok(())
 }
 
-fn write_xml_programme<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResult {
+fn write_xml_programme<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> Result<()> {
     for (id, channel) in &epg.channels {
         for event in &channel.events {
             w.write(XmlEvent::start_element("programme")
@@ -59,7 +59,7 @@ fn write_xml_programme<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlRe
     Ok(())
 }
 
-pub fn write_xml_tv<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> XmlResult {
+pub fn write_xml_tv<W: io::Write>(epg: &Epg, w: &mut EventWriter<W>) -> Result<()> {
     w.write(XmlEvent::StartDocument {
         version: XmlVersion::Version10,
         encoding: Some("utf-8"),
