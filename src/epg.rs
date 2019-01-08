@@ -6,7 +6,7 @@ use crate::error::{Error, Result};
 
 use mpegts::psi::*;
 use mpegts::textcode::*;
-use chrono::prelude::*;
+use chrono::Utc;
 
 use xml::reader::ParserConfig;
 use xml::writer::EmitterConfig;
@@ -23,9 +23,9 @@ pub struct EpgEvent {
     /// Unique event identifier
     pub event_id: u16,
     /// Event start time
-    pub start: i64,
+    pub start: u64,
     /// Event stop tiem (equal to the next event start time)
-    pub stop: i64,
+    pub stop: u64,
     /// Event title list
     pub title: HashMap<String, String>,
     /// Event short description list
@@ -42,7 +42,7 @@ impl<'a> From<&'a EitItem> for EpgEvent {
 
         event.event_id = eit_item.event_id;
         event.start = eit_item.start;
-        event.stop = eit_item.start + i64::from(eit_item.duration);
+        event.stop = eit_item.start + u64::from(eit_item.duration);
 
         for desc in eit_item.descriptors.iter() {
             match desc {
@@ -78,9 +78,9 @@ impl<'a> From<&'a EpgEvent> for EitItem {
 
         eit_item.event_id = event.event_id;
         eit_item.start = event.start;
-        eit_item.duration = (event.stop - event.start) as i32;
+        eit_item.duration = (event.stop - event.start) as u32;
 
-        let current_time = Utc::now().timestamp();
+        let current_time = Utc::now().timestamp() as u64;
         if current_time >= event.start && current_time < event.stop {
             eit_item.status = 4;
         } else {
@@ -129,7 +129,7 @@ pub struct EpgChannel {
     /// Channel events list
     pub events: Vec<EpgEvent>,
     /// Start time for last event
-    pub last_event_start: i64,
+    pub last_event_start: u64,
 }
 
 impl EpgChannel {

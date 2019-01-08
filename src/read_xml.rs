@@ -11,10 +11,10 @@ use xml::reader::{Events, XmlEvent};
 use crate::epg::{Epg, EpgChannel, EpgEvent, FMT_DATETIME};
 use mpegts::textcode;
 
-fn parse_date(value: &str) -> i64 {
+fn parse_date(value: &str) -> u64 {
     if value.len() > 14 {
         match DateTime::parse_from_str(value, FMT_DATETIME) {
-            Ok(v) => v.timestamp(),
+            Ok(v) => v.timestamp() as u64,
             _ => 0,
         }
     } else if (value.len() == 14) || (value.len() == 12) {
@@ -22,7 +22,7 @@ fn parse_date(value: &str) -> i64 {
         /* 12: %Y%m%d%H%M */
         let x = value.len() - 2;
         match Utc.datetime_from_str(value, &FMT_DATETIME[.. x]) {
-            Ok(v) => v.timestamp(),
+            Ok(v) => v.timestamp() as u64,
             _ => 0,
         }
     } else {
@@ -114,8 +114,8 @@ fn read_xml_channel<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &
 fn read_xml_programme<R: io::Read>(epg: &mut Epg, reader: &mut Events<R>, attrs: &[OwnedAttribute]) -> Result<()> {
     let mut event_id: u16 = 0;
     let mut channel = String::new();
-    let mut start: i64 = 0;
-    let mut stop: i64 = 0;
+    let mut start: u64 = 0;
+    let mut stop: u64 = 0;
 
     for attr in attrs.iter() {
         match attr.name.local_name.as_str() {
