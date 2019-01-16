@@ -101,8 +101,9 @@ impl<'a> From<&'a EpgEvent> for EitItem {
         }
 
         for (lang, desc) in &event.desc {
-            // 5 - additional space for for text stuff
-            let mut text_list = StringDVB::from_str(desc, event.codepage).split(0xFF - Desc4E::min_size());
+            let mut text_list = StringDVB::from_str(desc, event.codepage);
+            text_list.truncate(1000);
+            let mut text_list = text_list.split(0xFF - Desc4E::min_size());
             let mut number: u8 = 0;
             let last_number: u8 = text_list.len() as u8 - 1;
 
