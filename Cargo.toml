@@ -5,6 +5,7 @@ authors = ["Andrey Dyldin <and@cesbo.com>"]
 edition = "2018"
 
 [dependencies]
+curl = "0.4.19"
 mpegts = { path = "../libmpegts" }
 chrono = "0.4.6"
 xml-rs = "0.8.0"
