@@ -14,6 +14,8 @@ use xml::writer::EmitterConfig;
 use crate::read_xml::read_xml_tv;
 use crate::write_xml::write_xml_tv;
 
+use curl;
+
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
 // TODO: HashMap for codepage: language = codepage
@@ -166,23 +168,40 @@ pub struct Epg {
 
 impl Epg {
     pub fn load(&mut self, src: &str) -> Result<()> {
-        let buffer;
+        let url = src.splitn(2, "://").collect::<Vec<&str>>();
 
-        let src = src.splitn(2, "://").collect::<Vec<&str>>();
-        if src.len() == 1 {
-            let fh = File::open(src[0])?;
-            buffer = BufReader::new(fh);
-        } else {
-            match src[0] {
-                "file" => {
-                    let fh = File::open(src[1])?;
-                    buffer = BufReader::new(fh);
-                },
-                _ => return Err(Error::from(format!("unknown source type: {}", src[0]))),
-            };
+        if url.len() == 1 {
+            let fh = File::open(url[0])?;
+            return self.read(BufReader::new(fh));
         }
 
-        self.read(buffer)
+        match url[0] {
+            "file" => {
+                let fh = File::open(url[1])?;
+                return self.read(BufReader::new(fh));
+            },
+            "http" | "https" => {
+                let mut body = Vec::new();
+
+                let mut request = curl::easy::Easy::new();
+                request.url(src)?;
+
+                {
+                    let mut transfer = request.transfer();
+                    transfer.write_function(
+                        |data| {
+                            body.extend_from_slice(data);
+                            Ok(data.len())
+                        }
+                    )?;
+                    transfer.perform()?;
+                }
+
+                return self.read(body.as_slice());
+            }
+            _ => return Err(Error::from(format!("unknown source type: {}", url[0]))),
+        };
+
     }
 
     pub fn read<R: Read>(&mut self, src: R) -> Result<()> {

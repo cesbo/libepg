@@ -1,6 +1,7 @@
-
 use std::{io, result, fmt};
+
 use xml::{reader, writer};
+use curl;
 
 
 #[derive(Debug)]
@@ -9,6 +10,7 @@ pub enum Error {
     Reader(reader::Error),
     Writer(writer::Error),
     Io(io::Error),
+    Curl(curl::Error)
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -20,6 +22,7 @@ impl fmt::Display for Error {
             Error::Reader(ref e) => reader::Error::fmt(e, f),
             Error::Writer(ref e) => writer::Error::fmt(e, f),
             Error::Io(ref e) => io::Error::fmt(e, f),
+            Error::Curl(ref e) => curl::Error::fmt(e, f),
         }
     }
 }
@@ -51,5 +54,11 @@ impl From<writer::Error> for Error {
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
         Error::Io(e)
+    }
+}
+
+impl From<curl::Error> for Error {
+    fn from(e: curl::Error) -> Self {
+        Error::Curl(e)
     }
 }
