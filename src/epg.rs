@@ -169,37 +169,39 @@ pub struct Epg {
 impl Epg {
     pub fn load(&mut self, src: &str) -> Result<()> {
         let url = src.splitn(2, "://").collect::<Vec<&str>>();
+
         if url.len() == 1 {
             let fh = File::open(url[0])?;
             return self.read(BufReader::new(fh));
-        } else {
-            match url[0] {
-                "file" => {
-                    let fh = File::open(url[1])?;
-                    return self.read(BufReader::new(fh));
-                },
-                "http" | "https" => {
-                    let mut body = Vec::new();
-
-                    let mut request = curl::easy::Easy::new();
-                    request.url(src)?;
-
-                    {
-                        let mut transfer = request.transfer();
-                        transfer.write_function(
-                            |data| {
-                                body.extend_from_slice(data);
-                                Ok(data.len())
-                            }
-                        )?;
-                        transfer.perform()?;
-                    }
-
-                    return self.read(body.as_slice());
-                }
-                _ => return Err(Error::from(format!("unknown source type: {}", url[0]))),
-            };
         }
+
+        match url[0] {
+            "file" => {
+                let fh = File::open(url[1])?;
+                return self.read(BufReader::new(fh));
+            },
+            "http" | "https" => {
+                let mut body = Vec::new();
+
+                let mut request = curl::easy::Easy::new();
+                request.url(src)?;
+
+                {
+                    let mut transfer = request.transfer();
+                    transfer.write_function(
+                        |data| {
+                            body.extend_from_slice(data);
+                            Ok(data.len())
+                        }
+                    )?;
+                    transfer.perform()?;
+                }
+
+                return self.read(body.as_slice());
+            }
+            _ => return Err(Error::from(format!("unknown source type: {}", url[0]))),
+        };
+
     }
 
     pub fn read<R: Read>(&mut self, src: R) -> Result<()> {
