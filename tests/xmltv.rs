@@ -24,16 +24,19 @@ fn test_parse_programme() {
 #[test]
 fn test_parse_xmltv() {
     let mut epg = Epg::default();
-    epg.load("file://tests/docs/e2.xml").unwrap();
 
-    // get channel events
-    let mut events_iter = epg.channels.get("id-1").unwrap().events.iter();
-    // check event
-    let p1 = events_iter.next().unwrap();
-    assert_eq!(p1.title.get("eng").unwrap(), "Title #1");
-    // check event
-    let p2 = events_iter.next().unwrap();
-    assert_eq!(p2.title.get("eng").unwrap(), "Title #2");
+    for url in &["file://tests/docs/e2.xml", "https://pastebin.com/raw/dTk32xRZ"] {
+        epg.load(url).unwrap();
+
+        // get channel events
+        let mut events_iter = epg.channels.get("id-1").unwrap().events.iter();
+        // check event
+        let p1 = events_iter.next().unwrap();
+        assert_eq!(p1.title.get("eng").unwrap(), "Title #1");
+        // check event
+        let p2 = events_iter.next().unwrap();
+        assert_eq!(p2.title.get("eng").unwrap(), "Title #2");
+    }
 }
 
 #[test]
