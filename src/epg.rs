@@ -1,3 +1,4 @@
+use std::str;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::collections::HashMap;
@@ -15,6 +16,7 @@ use crate::read_xml::read_xml_tv;
 use crate::write_xml::write_xml_tv;
 
 use curl;
+use libflate::gzip;
 
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
 
@@ -181,6 +183,7 @@ impl Epg {
                 return self.read(BufReader::new(fh));
             },
             "http" | "https" => {
+                let mut headers = HashMap::new();
                 let mut body = Vec::new();
 
                 let mut request = curl::easy::Easy::new();
@@ -188,6 +191,22 @@ impl Epg {
 
                 {
                     let mut transfer = request.transfer();
+                    transfer.header_function(
+                        |header| {
+                            if let Ok(v) = str::from_utf8(header) {
+                                let mut iter = v.splitn(2, ':');
+
+                                let k = iter.next().unwrap().trim();
+                                if !k.is_empty() {
+                                    headers.insert(
+                                        k.to_lowercase(),
+                                        iter.next().unwrap_or("").trim().to_string()
+                                    );
+                                }
+                            }
+                            true
+                        }
+                    )?;
                     transfer.write_function(
                         |data| {
                             body.extend_from_slice(data);
@@ -197,11 +216,20 @@ impl Epg {
                     transfer.perform()?;
                 }
 
-                return self.read(body.as_slice());
+                if let Some(v) = headers.get("content-type") {
+                    if v.contains("xml") | v.contains("plain") {
+                        return self.read(body.as_slice());
+                    } else if v.contains("gzip") {
+                        return self.read(gzip::Decoder::new(body.as_slice())?);
+                    } else {
+                        return Err(Error::from(format!("unknown content-type: {}", v)));
+                    }
+                }
+
+                return Err(Error::from("content-type not contained in headers"));
             }
             _ => return Err(Error::from(format!("unknown source type: {}", url[0]))),
         };
-
     }
 
     pub fn read<R: Read>(&mut self, src: R) -> Result<()> {
