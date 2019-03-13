@@ -1,6 +1,6 @@
 use std::str;
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read, Write, Seek, SeekFrom};
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
@@ -18,7 +18,10 @@ use crate::write_xml::write_xml_tv;
 use curl;
 use libflate::gzip;
 
+
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
+pub const GZIP_START_BYTES: &[u8] = &[0x1f, 0x8b];
+
 
 // TODO: HashMap for codepage: language = codepage
 
@@ -173,14 +176,30 @@ impl Epg {
         let url = src.splitn(2, "://").collect::<Vec<&str>>();
 
         if url.len() == 1 {
-            let fh = File::open(url[0])?;
-            return self.read(BufReader::new(fh));
+            let mut buf = BufReader::new(File::open(url[0])?);
+
+            let mut start = [0; 2];
+            buf.read_exact(&mut start)?;
+            buf.seek(SeekFrom::Start(0))?;
+            if start == GZIP_START_BYTES {
+                return self.read(gzip::Decoder::new(buf)?);
+            }
+
+            return self.read(buf);
         }
 
         match url[0] {
             "file" => {
-                let fh = File::open(url[1])?;
-                return self.read(BufReader::new(fh));
+                let mut buf = BufReader::new(File::open(url[1])?);
+
+                let mut start = [0; 2];
+                buf.read_exact(&mut start)?;
+                buf.seek(SeekFrom::Start(0))?;
+                if start == GZIP_START_BYTES {
+                    return self.read(gzip::Decoder::new(buf)?);
+                }
+
+                return self.read(buf);
             },
             "http" | "https" => {
                 let mut headers = HashMap::new();
