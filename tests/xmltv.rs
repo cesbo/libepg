@@ -10,22 +10,23 @@ use std::str;
 
 #[test]
 fn test_parse_programme() {
-    let mut epg = Epg::default();
-    epg.load("file://tests/docs/e1.xml").unwrap();
-    let p = epg.channels.get("id-1").unwrap().events.get(0).unwrap();
+    for url in &["file://tests/docs/e1.xml", "file://tests/docs/e1.xml.gz"] {
+        let mut epg = Epg::default();
+        epg.load(url).unwrap();
+        let p = epg.channels.get("id-1").unwrap().events.get(0).unwrap();
 
-    // check event
-    assert_eq!(p.start, 1216103400);
-    assert_eq!(p.stop, 1216060200);
-    assert_eq!(p.title.get("eng").unwrap(), "Title");
-    assert_eq!(p.desc.get("eng").unwrap(), "Desc");
+        // check event
+        assert_eq!(p.start, 1216103400);
+        assert_eq!(p.stop, 1216060200);
+        assert_eq!(p.title.get("eng").unwrap(), "Title");
+        assert_eq!(p.desc.get("eng").unwrap(), "Desc");
+    }
 }
 
 #[test]
 fn test_parse_xmltv() {
-    let mut epg = Epg::default();
-
     for url in &["file://tests/docs/e2.xml", "https://pastebin.com/raw/dTk32xRZ"] {
+        let mut epg = Epg::default();
         epg.load(url).unwrap();
 
         // get channel events
