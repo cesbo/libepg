@@ -174,24 +174,20 @@ pub struct Epg {
 
 impl Epg {
     pub fn load(&mut self, src: &str) -> Result<()> {
-        let url = src.splitn(2, "://").collect::<Vec<&str>>();
+        let mut url: Vec<&str> = src.splitn(2, "://").collect();
 
         if url.len() == 1 {
-            let mut buf = BufReader::new(File::open(url[0])?);
-
-            match buf.is_gzipped()? {
-                true => return self.read(gzip::Decoder::new(buf)?),
-                false => return self.read(buf),
-            }
+            url.insert(0, "file");
         }
 
         match url[0] {
             "file" => {
                 let mut buf = BufReader::new(File::open(url[1])?);
 
-                match buf.is_gzipped()? {
-                    true => return self.read(gzip::Decoder::new(buf)?),
-                    false => return self.read(buf),
+                if buf.is_gzipped()? {
+                    return self.read(gzip::Decoder::new(buf)?)
+                } else {
+                    return self.read(buf)
                 }
             },
             "http" | "https" => {
@@ -211,9 +207,10 @@ impl Epg {
                     transfer.perform()?;
                 }
 
-                match body.is_gzipped()? {
-                    true => return self.read(gzip::Decoder::new(body.as_slice())?),
-                    false => return self.read(body.as_slice()),
+                if body.is_gzipped()? {
+                    return self.read(gzip::Decoder::new(body.as_slice())?)
+                } else {
+                    return self.read(body.as_slice())
                 }
             }
             _ => return Err(Error::from(format!("unknown source type: {}", url[0]))),
