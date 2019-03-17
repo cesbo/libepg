@@ -10,7 +10,7 @@ use std::str;
 
 #[test]
 fn test_parse_programme() {
-    for url in &["file://tests/docs/e1.xml", "file://tests/docs/e1.xml.gz"] {
+    for url in &["tests/docs/e1.xml", "file://tests/docs/e1.xml.gz"] {
         let mut epg = Epg::default();
         epg.load(url).unwrap();
         let p = epg.channels.get("id-1").unwrap().events.get(0).unwrap();
@@ -25,7 +25,7 @@ fn test_parse_programme() {
 
 #[test]
 fn test_parse_xmltv() {
-    for url in &["file://tests/docs/e2.xml", "https://pastebin.com/raw/dTk32xRZ"] {
+    for url in &["file://tests/docs/e2.xml", "http://cesbo.com/and/e2.xml.gz"] {
         let mut epg = Epg::default();
         epg.load(url).unwrap();
 
