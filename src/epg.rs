@@ -1,6 +1,6 @@
 use std::str;
 use std::fs::File;
-use std::io::{BufReader, Read, Write, Seek, SeekFrom};
+use std::io::{BufReader, Read, Write};
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
@@ -18,9 +18,10 @@ use crate::write_xml::write_xml_tv;
 use curl;
 use libflate::gzip;
 
+use crate::compressed::Compressed;
+
 
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
-pub const GZIP_START_BYTES: &[u8] = &[0x1f, 0x8b];
 
 
 // TODO: HashMap for codepage: language = codepage
@@ -178,31 +179,22 @@ impl Epg {
         if url.len() == 1 {
             let mut buf = BufReader::new(File::open(url[0])?);
 
-            let mut start = [0; 2];
-            buf.read_exact(&mut start)?;
-            buf.seek(SeekFrom::Start(0))?;
-            if start == GZIP_START_BYTES {
-                return self.read(gzip::Decoder::new(buf)?);
+            match buf.is_gzipped()? {
+                true => return self.read(gzip::Decoder::new(buf)?),
+                false => return self.read(buf),
             }
-
-            return self.read(buf);
         }
 
         match url[0] {
             "file" => {
                 let mut buf = BufReader::new(File::open(url[1])?);
 
-                let mut start = [0; 2];
-                buf.read_exact(&mut start)?;
-                buf.seek(SeekFrom::Start(0))?;
-                if start == GZIP_START_BYTES {
-                    return self.read(gzip::Decoder::new(buf)?);
+                match buf.is_gzipped()? {
+                    true => return self.read(gzip::Decoder::new(buf)?),
+                    false => return self.read(buf),
                 }
-
-                return self.read(buf);
             },
             "http" | "https" => {
-                let mut headers = HashMap::new();
                 let mut body = Vec::new();
 
                 let mut request = curl::easy::Easy::new();
@@ -210,22 +202,6 @@ impl Epg {
 
                 {
                     let mut transfer = request.transfer();
-                    transfer.header_function(
-                        |header| {
-                            if let Ok(v) = str::from_utf8(header) {
-                                let mut iter = v.splitn(2, ':');
-
-                                let k = iter.next().unwrap().trim();
-                                if !k.is_empty() {
-                                    headers.insert(
-                                        k.to_lowercase(),
-                                        iter.next().unwrap_or("").trim().to_string()
-                                    );
-                                }
-                            }
-                            true
-                        }
-                    )?;
                     transfer.write_function(
                         |data| {
                             body.extend_from_slice(data);
@@ -235,17 +211,10 @@ impl Epg {
                     transfer.perform()?;
                 }
 
-                if let Some(v) = headers.get("content-type") {
-                    if v.contains("xml") | v.contains("plain") {
-                        return self.read(body.as_slice());
-                    } else if v.contains("gzip") {
-                        return self.read(gzip::Decoder::new(body.as_slice())?);
-                    } else {
-                        return Err(Error::from(format!("unknown content-type: {}", v)));
-                    }
+                match body.is_gzipped()? {
+                    true => return self.read(gzip::Decoder::new(body.as_slice())?),
+                    false => return self.read(body.as_slice()),
                 }
-
-                return Err(Error::from("content-type not contained in headers"));
             }
             _ => return Err(Error::from(format!("unknown source type: {}", url[0]))),
         };
