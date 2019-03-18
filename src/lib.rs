@@ -6,3 +6,5 @@ mod write_xml;
 
 mod epg;
 pub use crate::epg::{Epg, EpgChannel, EpgEvent};
+
+mod compressed;

@@ -1,3 +1,4 @@
+use std::str;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::collections::HashMap;
@@ -15,8 +16,13 @@ use crate::read_xml::read_xml_tv;
 use crate::write_xml::write_xml_tv;
 
 use curl;
+use libflate::gzip;
+
+use crate::compressed::Compressed;
+
 
 pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
+
 
 // TODO: HashMap for codepage: language = codepage
 
@@ -168,17 +174,21 @@ pub struct Epg {
 
 impl Epg {
     pub fn load(&mut self, src: &str) -> Result<()> {
-        let url = src.splitn(2, "://").collect::<Vec<&str>>();
+        let mut url: Vec<&str> = src.splitn(2, "://").collect();
 
         if url.len() == 1 {
-            let fh = File::open(url[0])?;
-            return self.read(BufReader::new(fh));
+            url.insert(0, "file");
         }
 
         match url[0] {
             "file" => {
-                let fh = File::open(url[1])?;
-                return self.read(BufReader::new(fh));
+                let mut buf = BufReader::new(File::open(url[1])?);
+
+                if buf.is_gzipped()? {
+                    return self.read(gzip::Decoder::new(buf)?)
+                } else {
+                    return self.read(buf)
+                }
             },
             "http" | "https" => {
                 let mut body = Vec::new();
@@ -197,11 +207,14 @@ impl Epg {
                     transfer.perform()?;
                 }
 
-                return self.read(body.as_slice());
+                if body.is_gzipped()? {
+                    return self.read(gzip::Decoder::new(body.as_slice())?)
+                } else {
+                    return self.read(body.as_slice())
+                }
             }
             _ => return Err(Error::from(format!("unknown source type: {}", url[0]))),
         };
-
     }
 
     pub fn read<R: Read>(&mut self, src: R) -> Result<()> {
