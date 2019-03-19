@@ -53,8 +53,9 @@ impl<'a> From<&'a EitItem> for EpgEvent {
         event.stop = eit_item.start + u64::from(eit_item.duration);
 
         for desc in eit_item.descriptors.iter() {
-            match desc {
-                Descriptor::Desc4D(v) => {
+            match desc.tag() {
+                0x4D => {
+                    let v = desc.inner::<Desc4D>();
                     event.title.insert(v.lang.to_string(), v.name.to_string());
 
                     if !v.text.is_empty() {
@@ -64,7 +65,8 @@ impl<'a> From<&'a EitItem> for EpgEvent {
                             .push_str(&v.text.to_string());
                     }
                 },
-                Descriptor::Desc4E(v) => {
+                0x4E => {
+                    let v =desc.inner::<Desc4E>();
                     if !v.text.is_empty() {
                         event.desc
                             .entry(v.lang.to_string())
@@ -101,29 +103,29 @@ impl<'a> From<&'a EpgEvent> for EitItem {
                 None => "",
             };
 
-            eit_item.descriptors.push(Descriptor::Desc4D(Desc4D {
+            eit_item.descriptors.push(Desc4D {
                 lang: StringDVB::from_str(lang, 0),
                 name: StringDVB::from_str(title, event.codepage),
                 text: StringDVB::from_str(subtitle, event.codepage),
-            }));
+            });
         }
 
         for (lang, desc) in &event.desc {
             let mut text_list = StringDVB::from_str(desc, event.codepage);
             text_list.truncate(1000);
-            let mut text_list = text_list.split(0xFF - Desc4E::min_size());
+            let mut text_list = text_list.split(0xF0);
             let mut number: u8 = 0;
             let last_number: u8 = text_list.len() as u8 - 1;
 
             while ! text_list.is_empty() {
                 let text = text_list.remove(0);
-                eit_item.descriptors.push(Descriptor::Desc4E(Desc4E {
+                eit_item.descriptors.push(Desc4E {
                     number,
                     last_number,
                     lang: StringDVB::from_str(lang, 0),
                     items: Vec::new(),
                     text,
-                }));
+                });
                 number += 1;
             }
         }
