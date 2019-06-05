@@ -1,12 +1,13 @@
 [package]
 name = "epg"
 version = "0.1.0"
-authors = ["Andrey Dyldin <and@cesbo.com>"]
+authors = ["Cesbo Developers Team"]
 edition = "2018"
 
 [dependencies]
-curl = "0.4.19"
+error-rules = "0.2"
+http = { path = "../libhttp" }
 mpegts = { path = "../libmpegts" }
-chrono = "0.4.6"
-xml-rs = "0.8.0"
-libflate = "0.1.20"
+chrono = "0.4"
+xml-rs = "0.8"
+libflate = "0.1"

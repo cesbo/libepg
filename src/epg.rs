@@ -1,178 +1,68 @@
-use std::str;
-use std::fs::File;
-use std::io::{BufReader, Read, Write};
-use std::collections::HashMap;
+use std::{
+    str,
+    fs::File,
+    io::{
+        self,
+        BufRead,
+        BufReader,
+        Write,
+    },
+    collections::HashMap,
+};
 
-use crate::error::{Error, Result};
-
-use mpegts::psi::*;
-use mpegts::textcode::*;
-use chrono::Utc;
-
-use xml::reader::ParserConfig;
-use xml::writer::EmitterConfig;
-
-use crate::read_xml::read_xml_tv;
-use crate::write_xml::write_xml_tv;
-
-use curl;
 use libflate::gzip;
 
-use crate::compressed::Compressed;
+use http::{
+    HttpClient,
+    HttpClientError,
+};
 
-
-pub const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
+use crate::{
+    EpgChannel,
+    read_xml::{
+        read_xml_tv,
+        XmlReaderError,
+    },
+    write_xml::{
+        write_xml_tv,
+        XmlWriterError,
+    },
+};
 
 
 // TODO: HashMap for codepage: language = codepage
 
-#[derive(Default, Debug, Clone, PartialEq)]
-pub struct EpgEvent {
-    /// Unique event identifier
-    pub event_id: u16,
-    /// Event start time
-    pub start: u64,
-    /// Event stop tiem (equal to the next event start time)
-    pub stop: u64,
-    /// Event title list
-    pub title: HashMap<String, String>,
-    /// Event short description list
-    pub subtitle: HashMap<String, String>,
-    /// Event description list
-    pub desc: HashMap<String, String>,
-    /// Codepage
-    pub codepage: u8,
+
+#[derive(Debug, Error)]
+pub enum EpgError {
+    #[error_from("Epg IO: {}", 0)]
+    Io(io::Error),
+    #[error_from("Epg: {}", 0)]
+    HttpClient(HttpClientError),
+    #[error_from("Epg: {}", 0)]
+    XmlReader(XmlReaderError),
+    #[error_from("Epg: {}", 0)]
+    XmlWriter(XmlWriterError),
+    #[error_kind("Epg: unknown source type")]
+    UnknownSourceType,
 }
 
-impl<'a> From<&'a EitItem> for EpgEvent {
-    fn from(eit_item: &EitItem) -> Self {
-        let mut event = EpgEvent::default();
 
-        event.event_id = eit_item.event_id;
-        event.start = eit_item.start;
-        event.stop = eit_item.start + u64::from(eit_item.duration);
+type Result<T> = std::result::Result<T, EpgError>;
 
-        for desc in eit_item.descriptors.iter() {
-            match desc.tag() {
-                0x4D => {
-                    let v = desc.inner::<Desc4D>();
-                    event.title.insert(v.lang.to_string(), v.name.to_string());
 
-                    if !v.text.is_empty() {
-                        event.subtitle
-                            .entry(v.lang.to_string())
-                            .or_insert_with(String::new)
-                            .push_str(&v.text.to_string());
-                    }
-                },
-                0x4E => {
-                    let v =desc.inner::<Desc4E>();
-                    if !v.text.is_empty() {
-                        event.desc
-                            .entry(v.lang.to_string())
-                            .or_insert_with(String::new)
-                            .push_str(&v.text.to_string());
-                    }
-                },
-                _ => (),
-            };
-        }
-
-        event
-    }
+fn is_gzip<R: io::BufRead>(src: &mut R) -> io::Result<bool> {
+    static GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
+    let buf = src.fill_buf()?;
+    Ok(&buf[.. 2] == GZIP_MAGIC)
 }
 
-impl<'a> From<&'a EpgEvent> for EitItem {
-    fn from(event: &EpgEvent) -> Self {
-        let mut eit_item = EitItem::default();
-
-        eit_item.event_id = event.event_id;
-        eit_item.start = event.start;
-        eit_item.duration = (event.stop - event.start) as u32;
-
-        let current_time = Utc::now().timestamp() as u64;
-        if current_time >= event.start && current_time < event.stop {
-            eit_item.status = 4;
-        } else {
-            eit_item.status = 1;
-        }
-
-        for (lang, title) in &event.title {
-            let subtitle = match event.subtitle.get(lang) {
-                Some(v) => v,
-                None => "",
-            };
-
-            eit_item.descriptors.push(Desc4D {
-                lang: StringDVB::from_str(lang, 0),
-                name: StringDVB::from_str(title, event.codepage),
-                text: StringDVB::from_str(subtitle, event.codepage),
-            });
-        }
-
-        for (lang, desc) in &event.desc {
-            let mut text_list = StringDVB::from_str(desc, event.codepage);
-            text_list.truncate(1000);
-            let mut text_list = text_list.split(0xF0);
-            let mut number: u8 = 0;
-            let last_number: u8 = text_list.len() as u8 - 1;
-
-            while ! text_list.is_empty() {
-                let text = text_list.remove(0);
-                eit_item.descriptors.push(Desc4E {
-                    number,
-                    last_number,
-                    lang: StringDVB::from_str(lang, 0),
-                    items: Vec::new(),
-                    text,
-                });
-                number += 1;
-            }
-        }
-
-        eit_item
-    }
-}
-
-#[derive(Default, Debug)]
-pub struct EpgChannel {
-    /// Channel names list
-    pub name: HashMap<String, String>,
-    /// Channel events list
-    pub events: Vec<EpgEvent>,
-    /// Start time for last event
-    pub last_event_start: u64,
-}
-
-impl EpgChannel {
-    pub fn parse(&mut self, eit: &Eit) {
-        for eit_item in &eit.items {
-            self.events.push(EpgEvent::from(eit_item));
-        }
-        self.sort();
-    }
-
-    pub fn sort(&mut self) {
-        if self.events.is_empty() {
-            return;
-        }
-
-        self.events.sort_by(|a, b| a.start.cmp(&b.start));
-
-        self.last_event_start = self.events.last().unwrap().start;
-
-        let mut event_id = self.events.first().unwrap().event_id;
-        for event in &mut self.events {
-            event.event_id = event_id;
-            event_id += 1;
-        }
-    }
-}
 
 #[derive(Default, Debug)]
 pub struct Epg {
     pub channels: HashMap<String, EpgChannel>,
 }
+
 
 impl Epg {
     pub fn load(&mut self, src: &str) -> Result<()> {
@@ -184,63 +74,34 @@ impl Epg {
 
         match url[0] {
             "file" => {
-                let mut buf = BufReader::new(File::open(url[1])?);
-
-                if buf.is_gzipped()? {
-                    return self.read(gzip::Decoder::new(buf)?)
-                } else {
-                    return self.read(buf)
-                }
-            },
-            "http" | "https" => {
-                let mut body = Vec::new();
-
-                let mut request = curl::easy::Easy::new();
-                request.url(src)?;
-
-                {
-                    let mut transfer = request.transfer();
-                    transfer.write_function(
-                        |data| {
-                            body.extend_from_slice(data);
-                            Ok(data.len())
-                        }
-                    )?;
-                    transfer.perform()?;
-                }
-
-                if body.is_gzipped()? {
-                    return self.read(gzip::Decoder::new(body.as_slice())?)
-                } else {
-                    return self.read(body.as_slice())
-                }
+                let file = File::open(url[1])?;
+                let mut buf = BufReader::new(file);
+                self.read(&mut buf)
             }
-            _ => return Err(Error::from(format!("unknown source type: {}", url[0]))),
-        };
+            "http" | "https" => {
+                let mut client = HttpClient::new(src)?;
+                client.send()?;
+                client.receive()?;
+                self.read(&mut client)
+            }
+            _ => Err(EpgError::UnknownSourceType),
+        }
     }
 
-    pub fn read<R: Read>(&mut self, src: R) -> Result<()> {
-        let mut reader = ParserConfig::new()
-            .trim_whitespace(true)
-            .ignore_comments(true)
-            .create_reader(src)
-            .into_iter();
-
-        read_xml_tv(self, &mut reader)?;
-
-        for channel in self.channels.values_mut() {
-            channel.sort();
+    #[inline]
+    pub fn read<R: BufRead>(&mut self, src: &mut R) -> Result<()> {
+        if is_gzip(src)? {
+            read_xml_tv(self, gzip::Decoder::new(src)?)?;
+        } else {
+            read_xml_tv(self, src)?;
         }
+
         Ok(())
     }
 
+    #[inline]
     pub fn write<W: Write>(&self, dst: W) -> Result<()> {
-        let mut writer = EmitterConfig::new()
-            .write_document_declaration(false)
-            .create_writer(dst);
-
-        write_xml_tv(self, &mut writer)?;
-
+        write_xml_tv(self, dst)?;
         Ok(())
     }
 }
