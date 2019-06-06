@@ -11,7 +11,10 @@ mod epg_channel;
 pub use crate::epg_channel::EpgChannel;
 
 mod epg;
-pub use crate::epg::Epg;
+pub use crate::epg::{
+    Epg,
+    EpgError,
+};
 
 
 pub (crate) const FMT_DATETIME: &str = "%Y%m%d%H%M%S %z";
