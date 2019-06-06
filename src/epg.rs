@@ -65,23 +65,25 @@ pub struct Epg {
 
 
 impl Epg {
-    pub fn load(&mut self, src: &str) -> Result<()> {
-        let mut url: Vec<&str> = src.splitn(2, "://").collect();
+    pub fn load<R: AsRef<str>>(&mut self, src: R) -> Result<()> {
+        let src = src.as_ref();
 
-        if url.len() == 1 {
-            url.insert(0, "file");
-        }
+        let mut i = src.splitn(2, "://");
+        let scheme = i.next().unwrap();
+        let (scheme, path) = match i.next() {
+            Some(v) => (scheme, v),
+            None => ("file", scheme),
+        };
 
-        match url[0] {
+        match scheme {
             "file" => {
-                let file = File::open(url[1])?;
+                let file = File::open(path)?;
                 let mut buf = BufReader::new(file);
                 self.read(&mut buf)
             }
             "http" | "https" => {
                 let mut client = HttpClient::new(src)?;
-                client.send()?;
-                client.receive()?;
+                client.get()?;
                 self.read(&mut client)
             }
             _ => Err(EpgError::UnknownSourceType),
