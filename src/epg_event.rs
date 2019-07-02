@@ -42,10 +42,10 @@ impl<'a> From<&'a EitItem> for EpgEvent {
         for desc in eit_item.descriptors.iter() {
             match desc.tag() {
                 0x4D => {
-                    let v = desc.inner::<Desc4D>();
+                    let v = desc.downcast_ref::<Desc4D>();
                     event.title.insert(v.lang.to_string(), v.name.to_string());
 
-                    if !v.text.is_empty() {
+                    if ! v.text.is_empty() {
                         event.subtitle
                             .entry(v.lang.to_string())
                             .or_insert_with(String::new)
@@ -53,8 +53,8 @@ impl<'a> From<&'a EitItem> for EpgEvent {
                     }
                 },
                 0x4E => {
-                    let v =desc.inner::<Desc4E>();
-                    if !v.text.is_empty() {
+                    let v = desc.downcast_ref::<Desc4E>();
+                    if ! v.text.is_empty() {
                         event.desc
                             .entry(v.lang.to_string())
                             .or_insert_with(String::new)
