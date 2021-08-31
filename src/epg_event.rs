@@ -7,6 +7,7 @@ use mpegts::{
         EitItem,
         Desc4D,
         Desc4E,
+        DescRaw,
     },
     textcode::StringDVB,
 };
@@ -28,16 +29,19 @@ pub struct EpgEvent {
     pub desc: HashMap<String, String>,
     /// Codepage
     pub codepage: u8,
+    /// Parental Rating
+    pub parental_rating: HashMap<String, u8>,
 }
 
 
 impl<'a> From<&'a EitItem> for EpgEvent {
     fn from(eit_item: &EitItem) -> Self {
-        let mut event = EpgEvent::default();
-
-        event.event_id = eit_item.event_id;
-        event.start = eit_item.start;
-        event.stop = eit_item.start + u64::from(eit_item.duration);
+        let mut event = EpgEvent {
+            event_id: eit_item.event_id,
+            start: eit_item.start,
+            stop: eit_item.start + u64::from(eit_item.duration),
+            ..Default::default()
+        };
 
         for desc in eit_item.descriptors.iter() {
             match desc.tag() {
@@ -61,6 +65,9 @@ impl<'a> From<&'a EitItem> for EpgEvent {
                             .push_str(&v.text.to_string());
                     }
                 },
+                0x55 => {
+                    // TODO: parental_rating_descriptor
+                },
                 _ => (),
             };
         }
@@ -72,11 +79,12 @@ impl<'a> From<&'a EitItem> for EpgEvent {
 
 impl<'a> From<&'a EpgEvent> for EitItem {
     fn from(event: &EpgEvent) -> Self {
-        let mut eit_item = EitItem::default();
-
-        eit_item.event_id = event.event_id;
-        eit_item.start = event.start;
-        eit_item.duration = (event.stop - event.start) as u32;
+        let mut eit_item = EitItem {
+            event_id: event.event_id,
+            start: event.start,
+            duration: (event.stop - event.start) as u32,
+            ..Default::default()
+        };
 
         let current_time = Utc::now().timestamp() as u64;
         if current_time >= event.start && current_time < event.stop {
@@ -115,6 +123,25 @@ impl<'a> From<&'a EpgEvent> for EitItem {
                     text,
                 });
                 number += 1;
+            }
+        }
+
+        if ! event.parental_rating.is_empty() {
+            let mut desc: Vec<u8> = Vec::default();
+
+            for (country, rating) in &event.parental_rating {
+                let country = country.as_bytes();
+                if country.len() == 3 && (4 ..= 18).contains(rating) {
+                    desc.extend_from_slice(country);
+                    desc.push(*rating - 3);
+                }
+            }
+
+            if ! desc.is_empty() {
+                eit_item.descriptors.push(DescRaw {
+                    tag: 0x55,
+                    data: desc,
+                });
             }
         }
 

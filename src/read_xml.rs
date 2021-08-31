@@ -163,7 +163,7 @@ fn read_xml_programme<R: io::Read>(
 
     for attr in attrs.iter() {
         match attr.name.local_name.as_str() {
-            "event_id" => event_id = u16::from_str_radix(&attr.value, 10).unwrap_or(0),
+            "event_id" => event_id = attr.value.parse::<u16>().unwrap_or(0),
             "channel" => channel.push_str(&attr.value),
             "start" => start = parse_date(&attr.value),
             "stop" => stop = parse_date(&attr.value),
@@ -180,10 +180,12 @@ fn read_xml_programme<R: io::Read>(
         return skip_xml_element(reader);
     }
 
-    let mut event = EpgEvent::default();
-    event.event_id = event_id;
-    event.start = start;
-    event.stop = stop;
+    let mut event = EpgEvent {
+        event_id,
+        start,
+        stop,
+        ..Default::default()
+    };
 
     while let Some(e) = reader.next() {
         match e? {

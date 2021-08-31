@@ -54,7 +54,7 @@ type Result<T> = std::result::Result<T, EpgError>;
 fn is_gzip<R: io::BufRead>(src: &mut R) -> io::Result<bool> {
     static GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
     let buf = src.fill_buf()?;
-    Ok(buf.len() >= 2 && &buf[.. 2] == GZIP_MAGIC)
+    Ok(buf.len() >= 2 && buf[.. 2] == GZIP_MAGIC)
 }
 
 
