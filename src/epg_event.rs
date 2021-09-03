@@ -30,7 +30,7 @@ pub struct EpgEvent {
     /// Codepage
     pub codepage: u8,
     /// Parental Rating
-    pub parental_rating: HashMap<String, u8>,
+    pub parental_rating: HashMap<[u8; 3], u8>,
 }
 
 
@@ -130,8 +130,7 @@ impl<'a> From<&'a EpgEvent> for EitItem {
             let mut desc: Vec<u8> = Vec::default();
 
             for (country, rating) in &event.parental_rating {
-                let country = country.as_bytes();
-                if country.len() == 3 && (4 ..= 18).contains(rating) {
+                if (4 ..= 18).contains(rating) {
                     desc.extend_from_slice(country);
                     desc.push(*rating - 3);
                 }
