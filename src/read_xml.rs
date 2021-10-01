@@ -33,6 +33,8 @@ use crate::{
 pub enum XmlReaderError {
     #[error_from("XmlReader: {}", 0)]
     XmlReader(reader::Error),
+    #[error_from("IO: {}", 0)]
+    Io(io::Error),
 }
 
 
@@ -207,10 +209,30 @@ fn read_xml_programme<R: io::Read>(
 }
 
 
-pub fn read_xml_tv<R: io::Read>(
+pub fn read_xml_tv<R: io::BufRead>(
     epg: &mut Epg,
-    src: R) -> Result<()>
+    src: &mut R) -> Result<()>
 {
+    loop {
+        let (done, used) = {
+            let available = match src.fill_buf() {
+                Ok(n) => n,
+                Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(XmlReaderError::Io(e)),
+            };
+
+            match available.iter().position(|&b| b == b'<') {
+                Some(i) => (true, i),
+                None => (false, available.len()),
+            }
+        };
+
+        src.consume(used);
+        if done || used == 0 {
+            break;
+        }
+    }
+
     let mut reader = ParserConfig::new()
         .trim_whitespace(true)
         .ignore_comments(true)

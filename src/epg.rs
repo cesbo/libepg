@@ -93,7 +93,9 @@ impl Epg {
     #[inline]
     pub fn read<R: BufRead>(&mut self, src: &mut R) -> Result<()> {
         if is_gzip(src)? {
-            read_xml_tv(self, gzip::Decoder::new(src)?)?;
+            let decoder = gzip::Decoder::new(src)?;
+            let mut buf = BufReader::new(decoder);
+            read_xml_tv(self, &mut buf)?;
         } else {
             read_xml_tv(self, src)?;
         }
